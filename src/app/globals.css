@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  /* Declarando a paleta Jamef no padrão v4 */
+  --color-brand-red: #D32F2F;
+  --color-brand-dark-red: #9A1B1B;
+  --color-brand-white: #FFFFFF;
+  --color-brand-gray: #F8F9FA;
+  
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* Forçamos o fundo branco para manter o minimalismo */
+body {
+  background-color: white;
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
