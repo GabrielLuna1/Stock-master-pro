@@ -6,21 +6,31 @@ import Product from "@/models/Product";
 import Movement from "@/models/Movement";
 import SystemLog from "@/models/SystemLog";
 
-// PUT (Mantido igual)
+// ==========================================
+// ATENÇÃO: Correção para Next.js 15/16
+// params agora é uma Promise e precisa de await
+// ==========================================
+
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> }, // <--- MUDANÇA 1: Promise
 ) {
-  // ... (seu código de PUT continua aqui, não vamos mexer)
+  const { id } = await params; // <--- MUDANÇA 2: Await
+
+  // ... (Seu código de PUT original viria aqui.
+  // Lembre-se de usar a variável 'id' ao invés de 'params.id' se for recuperar o código antigo)
+
   return NextResponse.json({ ok: true });
 }
 
 // 🗑️ DELETE COM RASTREAMENTO DETALHADO
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> }, // <--- MUDANÇA 1: Promise
 ) {
-  console.log("🔴 [DEBUG] 1. Iniciando Exclusão do ID:", params.id);
+  const { id } = await params; // <--- MUDANÇA 2: Await
+
+  console.log("🔴 [DEBUG] 1. Iniciando Exclusão do ID:", id); // <--- Usa 'id' direto
 
   try {
     const session = await getServerSession(authOptions);
@@ -33,7 +43,7 @@ export async function DELETE(
     const user = session.user as any;
 
     // 1. Busca
-    const product = await Product.findById(params.id);
+    const product = await Product.findById(id); // <--- Usa 'id'
     if (!product) {
       console.log("❌ [DEBUG] Produto não encontrado no banco.");
       return NextResponse.json(
@@ -60,10 +70,10 @@ export async function DELETE(
     }
 
     // 3. Deleta
-    await Product.findByIdAndDelete(params.id);
+    await Product.findByIdAndDelete(id); // <--- Usa 'id'
     console.log("🟢 [DEBUG] 4. Produto deletado.");
 
-    // 4. Auditoria (AQUI É ONDE PODE ESTAR O ERRO)
+    // 4. Auditoria
     console.log("🟡 [DEBUG] 5. Tentando criar SystemLog...");
 
     try {
@@ -91,10 +101,12 @@ export async function DELETE(
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> }, // <--- MUDANÇA 1: Promise
 ) {
+  const { id } = await params; // <--- MUDANÇA 2: Await
+
   await connectDB();
-  const product = await Product.findById(params.id);
+  const product = await Product.findById(id); // <--- Usa 'id'
   if (!product)
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   return NextResponse.json(product);
