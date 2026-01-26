@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { OverviewChart } from "../components/dashboard/OverviewChart";
+import AutoUpdate from "@/components/layout/AutoUpdate";
 import {
   Package,
   AlertTriangle,

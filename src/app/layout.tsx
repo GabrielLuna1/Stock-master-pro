@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import AutoUpdate from "@/components/layout/AutoUpdate";
 import { LanguageProvider } from "../context/LanguageContext";
 import AppLayout from "@/components/layout/AppLayout";
 import AuthProvider from "@/components/providers/AuthProvider";
@@ -29,8 +30,8 @@ export default function RootLayout({
           {/* Ele precisa envolver o AppLayout para a Sidebar conseguir ler o contador */}
           <DashboardProvider>
             <LanguageProvider>
+              <AutoUpdate />
               <AppLayout>{children}</AppLayout>
-
               {/* 👇 3. Adicionamos o Toaster para as notificações bonitas */}
               <Toaster richColors position="top-right" closeButton />
             </LanguageProvider>
