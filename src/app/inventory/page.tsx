@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   Search,
-  Edit3,
   FileText,
-  Trash2,
   Filter,
   Loader2,
   Layers,
@@ -17,9 +15,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Trash2,
   History,
   CheckSquare,
   Square,
+  Edit3,
 } from "lucide-react";
 
 // Componentes
@@ -27,17 +27,19 @@ import EditProductModal from "../../components/inventory/EditProductModal";
 import DeleteConfirmModal from "../../components/inventory/DeleteConfirmModal";
 import AddProductModal from "../../components/inventory/AddProductModal";
 import HistoryModal from "../../components/inventory/HistoryModal";
-import BatchDeleteModal from "../../components/inventory/BatchDeleteModal"; // ✅ Novo Modal
+import BatchDeleteModal from "../../components/inventory/BatchDeleteModal";
+// 👇 IMPORT NOVO
+import { DataDisplay } from "@/components/ui/DataDisplay";
 
 // Libs
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { toast } from "sonner";
-import { useDashboard } from "@/providers/DashboardContext"; // ✅ Atualização Global
+import { useDashboard } from "@/providers/DashboardContext";
 
 export default function InventoryPage() {
   const { data: session } = useSession();
-  const { refreshDashboard } = useDashboard(); // Hook para atualizar a sidebar
+  const { refreshDashboard } = useDashboard();
 
   // Estados de Dados
   const [products, setProducts] = useState<any[]>([]);
@@ -57,7 +59,7 @@ export default function InventoryPage() {
   // Estado de Seleção em Massa
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
-  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false); // ✅ Controle do novo modal
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,7 +89,7 @@ export default function InventoryPage() {
       const cats = await catRes.json();
       setProducts(Array.isArray(prods) ? prods : []);
       setCategories(Array.isArray(cats) ? cats : []);
-      setSelectedIds([]); // Limpa seleção ao recarregar
+      setSelectedIds([]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
       toast.error("Erro ao carregar estoque.");
@@ -168,7 +170,6 @@ export default function InventoryPage() {
     }
   };
 
-  // ⚡ Função chamada pelo BatchDeleteModal
   const executeBatchDelete = async () => {
     setIsBatchDeleting(true);
     try {
@@ -180,8 +181,8 @@ export default function InventoryPage() {
 
       if (res.ok) {
         toast.success(`${selectedIds.length} produtos excluídos com sucesso!`);
-        await refreshDashboard(); // Atualiza contador global
-        fetchData(); // Atualiza tabela local
+        await refreshDashboard();
+        fetchData();
         setIsBatchModalOpen(false);
         setSelectedIds([]);
       } else {
@@ -249,7 +250,6 @@ export default function InventoryPage() {
     }
   };
 
-  // --- EXPORTAR PDF ---
   const exportToPDF = () => {
     const doc = new jsPDF();
     const tableData = filteredProducts.map((p) => [
@@ -268,14 +268,98 @@ export default function InventoryPage() {
     doc.save("inventario.pdf");
   };
 
-  // Contadores Visuais
   const countCritical = products.filter(
     (p) => Number(p.quantity) <= Number(p.minStock || 15),
   ).length;
   const countStable = products.length - countCritical;
 
+  // 👇 CONFIGURAÇÃO DAS COLUNAS PARA O DataDisplay
+  const columns = [
+    {
+      header: "Select",
+      accessorKey: "_id" as keyof any,
+      // Renderiza o Checkbox na tabela Desktop
+      cell: (item: any) => {
+        const isSelected = selectedIds.includes(item._id);
+        return (
+          <button
+            onClick={() => handleSelectOne(item._id)}
+            className="hover:text-red-500"
+          >
+            {isSelected ? (
+              <CheckSquare size={18} className="text-red-600" />
+            ) : (
+              <Square size={18} />
+            )}
+          </button>
+        );
+      },
+    },
+    {
+      header: "SKU",
+      accessorKey: "sku" as keyof any,
+      cell: (item: any) => (
+        <span className="font-bold text-gray-400 font-mono text-xs">
+          {item.sku}
+        </span>
+      ),
+    },
+    {
+      header: "Produto",
+      accessorKey: "name" as keyof any,
+      cell: (item: any) => (
+        <span className="font-bold text-gray-900">{item.name}</span>
+      ),
+    },
+    {
+      header: "Categoria",
+      accessorKey: "category" as keyof any,
+      cell: (item: any) => (
+        <div className="flex items-center gap-2">
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: getCategoryColor(item.category) }}
+          />
+          <span className="text-[10px] font-black text-gray-500 uppercase">
+            {item.category}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Qtd",
+      accessorKey: "quantity" as keyof any,
+      cell: (item: any) => {
+        const isLow = Number(item.quantity) <= Number(item.minStock || 15);
+        return (
+          <div className="flex flex-col">
+            <span className="font-black text-gray-800">{item.quantity} un</span>
+            {isLow && (
+              <span className="text-[9px] font-bold text-red-500 flex items-center gap-1">
+                <AlertTriangle size={8} /> REPOSIÇÃO
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    // Coluna extra só para ações extras (Histórico)
+    {
+      header: "Histórico",
+      accessorKey: "_id" as keyof any,
+      cell: (item: any) => (
+        <button
+          onClick={() => handleHistory(item)}
+          className="p-1.5 hover:bg-purple-50 text-gray-400 hover:text-purple-600 rounded-full transition-all"
+        >
+          <History size={18} />
+        </button>
+      ),
+    },
+  ];
+
   return (
-    <div className="p-8 md:p-12 min-h-screen flex flex-col relative pb-24">
+    <div className="p-4 md:p-12 min-h-screen flex flex-col relative pb-24">
       {/* HEADER */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -283,7 +367,7 @@ export default function InventoryPage() {
             <div className="p-2 rounded-lg text-red-600 bg-red-50">
               <Search size={24} />
             </div>
-            <h1 className="text-3xl font-black text-gray-900 tracking-tight">
+            <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
               Gerencia de <span className="text-red-600">Estoque</span>
             </h1>
           </div>
@@ -292,19 +376,21 @@ export default function InventoryPage() {
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 w-full md:w-auto">
           <button
             onClick={exportToPDF}
-            className="bg-white border border-gray-200 text-gray-700 px-4 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 hover:text-red-600 transition-all shadow-sm active:scale-95 text-xs"
+            className="flex-1 md:flex-none justify-center bg-white border border-gray-200 text-gray-700 px-4 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 hover:text-red-600 transition-all shadow-sm active:scale-95 text-xs"
           >
-            <FileText size={18} /> EXPORTAR PDF
+            <FileText size={18} />{" "}
+            <span className="hidden md:inline">EXPORTAR PDF</span>
           </button>
 
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-700 transition-all shadow-lg shadow-red-200 active:scale-95 text-xs"
+            className="flex-1 md:flex-none justify-center bg-red-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-700 transition-all shadow-lg shadow-red-200 active:scale-95 text-xs"
           >
-            <Plus size={20} /> ADICIONAR ITEM
+            <Plus size={20} />{" "}
+            <span className="hidden md:inline">ADICIONAR ITEM</span>
           </button>
         </div>
       </header>
@@ -406,201 +492,62 @@ export default function InventoryPage() {
               </span>
             </button>
           </div>
-          <div className="flex items-center gap-3 overflow-x-auto pb-2 md:pb-0">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-              <Calendar size={12} /> Cadastro:
-            </span>
-            <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
-              <span className="text-[10px] font-bold text-gray-400">DE</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent outline-none text-xs font-bold text-gray-700 w-24 cursor-pointer"
-              />
-            </div>
-            <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
-              <span className="text-[10px] font-bold text-gray-400">ATÉ</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent outline-none text-xs font-bold text-gray-700 w-24 cursor-pointer"
-              />
-            </div>
-            {(startDate || endDate) && (
-              <button
-                onClick={() => {
-                  setStartDate("");
-                  setEndDate("");
-                }}
-                className="p-1.5 hover:bg-red-50 text-red-400 rounded-md transition-colors"
-                title="Limpar Data"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* TABELA */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6 flex-1">
+      {/* ⚡ TABELA RESPONSIVA (Aqui entra o DataDisplay) */}
+      <div className="flex-1">
         {loading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-gray-200" size={40} />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[850px] table-fixed">
-              <thead className="bg-gray-50/50 border-b border-gray-100">
-                <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                  {/* Checkbox Cabeçalho */}
-                  <th className="px-6 py-4 w-[50px] text-center">
-                    <button
-                      onClick={handleSelectAll}
-                      className="hover:text-red-500 transition-colors"
-                    >
-                      {selectedIds.length > 0 &&
-                      selectedIds.length === currentProducts.length ? (
-                        <CheckSquare size={18} className="text-red-600" />
-                      ) : (
-                        <Square size={18} />
-                      )}
-                    </button>
-                  </th>
-                  <th className="px-8 py-4 w-[15%]">SKU</th>
-                  <th className="px-8 py-4 w-[30%]">Produto</th>
-                  <th className="px-8 py-4 w-[20%]">Categoria</th>
-                  <th className="px-8 py-4 w-[15%] text-center">Quantidade</th>
-                  <th className="px-8 py-4 w-[20%] text-right px-10">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {currentProducts.map((p) => {
-                  const isLow = Number(p.quantity) <= Number(p.minStock || 15);
-                  const isSelected = selectedIds.includes(p._id);
-                  return (
-                    <tr
-                      key={p._id}
-                      className={`hover:bg-red-50/30 transition-colors group ${isSelected ? "bg-red-50/50" : ""}`}
-                    >
-                      {/* Checkbox Linha */}
-                      <td className="px-6 py-5 text-center">
-                        <button
-                          onClick={() => handleSelectOne(p._id)}
-                          className="text-gray-300 hover:text-red-500 transition-colors"
-                        >
-                          {isSelected ? (
-                            <CheckSquare size={18} className="text-red-600" />
-                          ) : (
-                            <Square size={18} />
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-8 py-5">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-black text-red-600 uppercase">
-                            {p.sku}
-                          </span>
-                          <span className="text-[9px] text-gray-300 font-mono mt-0.5">
-                            {new Date(p.createdAt).toLocaleDateString("pt-BR")}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-gray-900 text-sm">
-                            {p.name}
-                          </span>
-                          {isLow && (
-                            <span className="text-[10px] font-bold text-red-500 flex items-center gap-1 mt-0.5">
-                              <AlertTriangle size={10} /> REPOSIÇÃO
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                            style={{
-                              backgroundColor: getCategoryColor(p.category),
-                            }}
-                          />
-                          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                            {p.category || "GERAL"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-center font-black text-gray-900 text-sm">
-                        {p.quantity} UN
-                      </td>
-                      <td className="px-8 py-5 text-right px-10">
-                        <div className="flex justify-end gap-3">
-                          <button
-                            onClick={() => handleHistory(p)}
-                            className="p-2 text-gray-400 hover:text-purple-600 rounded-full hover:bg-purple-50 transition-all"
-                          >
-                            <History size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(p)}
-                            className="p-2 text-gray-400 hover:text-blue-600 rounded-full hover:bg-blue-50 transition-all"
-                          >
-                            <Edit3 size={18} />
-                          </button>
-                          {/* Só Admin exclui */}
-                          {session?.user &&
-                            (session.user as any).role === "admin" && (
-                              <button
-                                onClick={() => handleDeleteRequest(p)}
-                                className="p-2 text-gray-400 hover:text-red-600 rounded-full hover:bg-red-50 transition-all"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataDisplay
+            data={currentProducts}
+            columns={columns}
+            titleField="name"
+            subtitleField="sku"
+            onEdit={handleEdit}
+            onDelete={
+              (session?.user as any)?.role === "admin"
+                ? handleDeleteRequest
+                : undefined
+            }
+          />
         )}
       </div>
 
       {/* --- BARRA FLUTUANTE (SELEÇÃO) --- */}
       {selectedIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-5 z-50 border border-gray-800">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-5 z-50 border border-gray-800 w-[90%] md:w-auto justify-between md:justify-start">
           <div className="flex items-center gap-3 pl-2">
             <div className="bg-red-600 text-white font-black w-8 h-8 rounded-lg flex items-center justify-center text-sm">
               {selectedIds.length}
             </div>
-            <span className="font-bold text-sm text-gray-300">
+            <span className="font-bold text-sm text-gray-300 hidden md:inline">
               Itens selecionados
             </span>
           </div>
-          <div className="h-8 w-px bg-gray-700"></div>
-          <button
-            onClick={() => setIsBatchModalOpen(true)} // ✅ Abre o modal de verdade
-            className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95"
-          >
-            <Trash2 size={16} />
-            Excluir Selecionados
-          </button>
-          <button
-            onClick={() => setSelectedIds([])}
-            className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsBatchModalOpen(true)}
+              className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95"
+            >
+              <Trash2 size={16} />
+              Excluir
+            </button>
+            <button
+              onClick={() => setSelectedIds([])}
+              className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
       )}
 
       {/* PAGINAÇÃO */}
-      <div className="flex items-center justify-between mt-auto">
+      <div className="flex items-center justify-between mt-8">
         <button
           onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
           disabled={currentPage === 1 || loading}
@@ -609,11 +556,11 @@ export default function InventoryPage() {
           <div className="bg-gray-50 p-1.5 rounded-lg group-hover:bg-red-50 transition-colors">
             <ChevronLeft size={18} />
           </div>{" "}
-          <span>Anterior</span>
+          <span className="hidden md:inline">Anterior</span>
         </button>
         <div className="flex flex-col items-center">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-            Página Atual
+            Página
           </span>
           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
             <span className="font-black text-red-600 text-lg">
@@ -628,7 +575,7 @@ export default function InventoryPage() {
           disabled={currentPage === totalPages || loading || totalPages === 0}
           className="group flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-2xl shadow-sm text-sm font-bold text-gray-600 hover:border-red-500 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
-          <span>Próxima</span>
+          <span className="hidden md:inline">Próxima</span>
           <div className="bg-gray-50 p-1.5 rounded-lg group-hover:bg-red-50 transition-colors">
             <ChevronRight size={18} />
           </div>
@@ -664,8 +611,6 @@ export default function InventoryPage() {
           loading={historyLoading}
         />
       )}
-
-      {/* ✅ NOVO MODAL DE DELEÇÃO EM MASSA */}
       <BatchDeleteModal
         isOpen={isBatchModalOpen}
         onClose={() => setIsBatchModalOpen(false)}
