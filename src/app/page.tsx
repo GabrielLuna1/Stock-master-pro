@@ -99,7 +99,7 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [currentMonthIdx, currentYear]);
 
-  // --- 💎 FUNÇÃO EXCEL "RED BANNER DESIGN" (Baseado na sua imagem) ---
+  // --- 💎 FUNÇÃO EXCEL "RED BANNER DESIGN" ---
   const handleDownloadExcel = async () => {
     if (!stats.chartData.length) {
       toast.error("Sem dados para exportar.");
@@ -109,7 +109,7 @@ export default function Dashboard() {
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Relatório Mensal", {
-        views: [{ showGridLines: false }], // Remove grades do fundo
+        views: [{ showGridLines: false }],
       });
 
       // 1. FILTRAR DADOS (Mês Atual)
@@ -125,30 +125,27 @@ export default function Dashboard() {
         return;
       }
 
-      // 2. CONFIGURAR COLUNAS (Sem Saldo, layout espaçado)
+      // 2. CONFIGURAR COLUNAS
       worksheet.columns = [
-        { key: "margin", width: 2 }, // A: Margem
-        { key: "date", width: 15 }, // B: Data
-        { key: "spacer1", width: 5 }, // C: Espaço
-        { key: "in", width: 20 }, // D: Entradas
-        { key: "spacer2", width: 5 }, // E: Espaço
-        { key: "out", width: 20 }, // F: Saídas
+        { key: "margin", width: 2 },
+        { key: "date", width: 15 },
+        { key: "spacer1", width: 5 },
+        { key: "in", width: 20 },
+        { key: "spacer2", width: 5 },
+        { key: "out", width: 20 },
       ];
 
-      // --- 🎨 3. CABEÇALHO (BANNER VERMELHO) ---
-
-      // Pinta o fundo vermelho nas linhas 2 a 5, colunas B a F
+      // --- 3. CABEÇALHO ---
       for (let r = 2; r <= 5; r++) {
         for (let c = 2; c <= 6; c++) {
           worksheet.getCell(r, c).fill = {
             type: "pattern",
             pattern: "solid",
-            fgColor: { argb: "FFDC2626" }, // Vermelho Brand
+            fgColor: { argb: "FFDC2626" },
           };
         }
       }
 
-      // -- LOGO (Quadrado Branco com S Vermelho) --
       worksheet.mergeCells("B3:B4");
       const logoCell = worksheet.getCell("B3");
       logoCell.value = "S";
@@ -157,16 +154,15 @@ export default function Dashboard() {
         family: 4,
         size: 28,
         bold: true,
-        color: { argb: "FFDC2626" }, // Texto Vermelho
+        color: { argb: "FFDC2626" },
       };
       logoCell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FFFFFFFF" }, // Fundo Branco
+        fgColor: { argb: "FFFFFFFF" },
       };
       logoCell.alignment = { vertical: "middle", horizontal: "center" };
 
-      // -- TÍTULO (Texto Branco) --
       worksheet.mergeCells("D3:F3");
       const titleCell = worksheet.getCell("D3");
       titleCell.value = "STOCKMASTER";
@@ -174,11 +170,10 @@ export default function Dashboard() {
         name: "Segoe UI",
         size: 18,
         bold: true,
-        color: { argb: "FFFFFFFF" }, // Branco
+        color: { argb: "FFFFFFFF" },
       };
       titleCell.alignment = { vertical: "bottom", horizontal: "left" };
 
-      // -- SUBTÍTULO (Texto Branco) --
       worksheet.mergeCells("D4:F4");
       const subCell = worksheet.getCell("D4");
       subCell.value = `RELATÓRIO DE ${formattedMonthName.toUpperCase()} ${currentYear}`;
@@ -186,15 +181,13 @@ export default function Dashboard() {
         name: "Segoe UI",
         size: 10,
         bold: true,
-        color: { argb: "FFFEE2E2" }, // Branco levemente rosado (Red-100)
+        color: { argb: "FFFEE2E2" },
       };
       subCell.alignment = { vertical: "top", horizontal: "left" };
 
-      // Espaço
       worksheet.addRow([]);
       worksheet.addRow([]);
 
-      // --- 4. CABEÇALHO DA TABELA (Minimalista) ---
       const headerRow = worksheet.getRow(8);
       headerRow.getCell(2).value = "DATA";
       headerRow.getCell(4).value = "ENTRADAS (UN)";
@@ -207,16 +200,14 @@ export default function Dashboard() {
           name: "Segoe UI",
           bold: true,
           size: 9,
-          color: { argb: "FF000000" }, // Preto
+          color: { argb: "FF000000" },
         };
         cell.alignment = { horizontal: "center", vertical: "middle" };
-        // Borda grossa vermelha apenas embaixo
         cell.border = {
           bottom: { style: "thick", color: { argb: "FFDC2626" } },
         };
       });
 
-      // --- 5. DADOS ---
       let totalIn = 0;
       let totalOut = 0;
 
@@ -225,11 +216,11 @@ export default function Dashboard() {
         totalOut += item.saidas;
 
         const row = worksheet.addRow([
-          "", // Margem
+          "",
           item.name,
-          "", // Espaço
+          "",
           item.entradas === 0 ? "-" : item.entradas,
-          "", // Espaço
+          "",
           item.saidas === 0 ? "-" : item.saidas,
         ]);
 
@@ -243,17 +234,14 @@ export default function Dashboard() {
             color: { argb: "FF374151" },
           };
           cell.alignment = { horizontal: "center", vertical: "middle" };
-          // Linha pontilhada cinza embaixo
           cell.border = {
             bottom: { style: "dotted", color: { argb: "FFD1D5DB" } },
           };
         });
       });
 
-      // Espaço antes do total
       worksheet.addRow([]);
 
-      // --- 6. TOTAIS (Blocos Coloridos) ---
       const totalRow = worksheet.addRow([
         "",
         "TOTAL GERAL",
@@ -264,40 +252,36 @@ export default function Dashboard() {
       ]);
       totalRow.height = 30;
 
-      // Label "TOTAL GERAL"
       const labelCell = totalRow.getCell(2);
       labelCell.font = { name: "Segoe UI", bold: true, size: 10 };
       labelCell.alignment = { horizontal: "left", vertical: "middle" };
 
-      // Total Entradas (VERDE SÓLIDO)
       const inCell = totalRow.getCell(4);
       inCell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FF10B981" }, // Emerald 500
+        fgColor: { argb: "FF10B981" },
       };
       inCell.font = {
         name: "Segoe UI",
         bold: true,
         color: { argb: "FFFFFFFF" },
-      }; // Branco
+      };
       inCell.alignment = { horizontal: "center", vertical: "middle" };
 
-      // Total Saídas (VERMELHO SÓLIDO)
       const outCell = totalRow.getCell(6);
       outCell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FFDC2626" }, // Red 600
+        fgColor: { argb: "FFDC2626" },
       };
       outCell.font = {
         name: "Segoe UI",
         bold: true,
         color: { argb: "FFFFFFFF" },
-      }; // Branco
+      };
       outCell.alignment = { horizontal: "center", vertical: "middle" };
 
-      // --- 7. RODAPÉ ---
       worksheet.addRow([]);
       const footerRow = worksheet.addRow([
         "",
@@ -309,7 +293,6 @@ export default function Dashboard() {
         color: { argb: "FF9CA3AF" },
       };
 
-      // Gera o arquivo
       const buffer = await workbook.xlsx.writeBuffer();
       const fileName = `Relatorio_${formattedMonthName}_${currentYear}.xlsx`;
 
@@ -331,18 +314,19 @@ export default function Dashboard() {
     month: "long",
   });
 
+  // 👇 AJUSTE DE PADDING MOBILE: p-4 no celular, p-12 no PC
   return (
-    <div className="p-8 md:p-12 min-h-screen bg-gray-50/50">
+    <div className="p-4 md:p-12 min-h-screen bg-gray-50/50 pb-24">
       {/* HEADER */}
-      <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+      <div className="mb-6 md:mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
             Olá,{" "}
             <span className="text-red-600">
-              {session?.user?.name || "Visitante"}
+              {session?.user?.name?.split(" ")[0] || "Visitante"}
             </span>
           </h1>
-          <p className="text-gray-500 font-medium mt-1">
+          <p className="text-sm md:text-base text-gray-500 font-medium mt-1">
             Visão geral estratégica de{" "}
             <span className="capitalize font-bold text-gray-700">
               {formattedMonthName}
@@ -351,18 +335,19 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-3">
+        {/* BOTOES DE AÇÃO - Full width no mobile */}
+        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
           {/* BOTÃO EXCEL */}
           <button
             onClick={handleDownloadExcel}
             disabled={stats.loading}
-            className="bg-white text-red-600 border border-red-200 px-5 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm text-xs active:scale-95 disabled:opacity-50 uppercase tracking-wide"
+            className="w-full md:w-auto justify-center bg-white text-red-600 border border-red-200 px-5 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm text-xs active:scale-95 disabled:opacity-50 uppercase tracking-wide"
           >
             <FileSpreadsheet size={18} />
-            {`Relatório de ${formattedMonthName}`}
+            <span className="truncate">{`Relatório de ${formattedMonthName}`}</span>
           </button>
 
-          <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100">
+          <div className="w-full md:w-auto justify-center flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100">
             <div className="bg-red-50 p-2 rounded-lg text-red-600">
               <CalendarDays size={20} />
             </div>
@@ -373,10 +358,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPIS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* KPIS - Grid Responsivo */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* CARD 1 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group">
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden group">
           <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <div className="relative z-10 flex justify-between items-start">
             <div>
@@ -391,13 +376,13 @@ export default function Dashboard() {
               <Package size={20} />
             </div>
           </div>
-          <div className="relative z-10 flex items-center gap-1 text-xs font-bold text-emerald-600 w-fit rounded-md mt-auto">
+          <div className="relative z-10 flex items-center gap-1 text-xs font-bold text-emerald-600 w-fit rounded-md mt-auto pt-2">
             <TrendingUp size={12} /> Base ativa
           </div>
         </div>
 
         {/* CARD 2 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden">
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
           {stats.lowStock > 0 && (
             <div className="absolute top-0 right-0 w-1.5 h-full bg-red-500"></div>
           )}
@@ -424,17 +409,17 @@ export default function Dashboard() {
               <AlertTriangle size={20} />
             </div>
           </div>
-          <p className="text-xs text-gray-400 font-medium mt-auto">
+          <p className="text-xs text-gray-400 font-medium mt-auto pt-2">
             Itens abaixo do mínimo
           </p>
         </div>
 
         {/* CARD 3 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Entradas ({formattedMonthName})
+                Entradas ({formattedMonthName.substring(0, 3)})
               </p>
               <h3 className="text-3xl font-black text-gray-800 mt-1">
                 {stats.loading ? "..." : stats.totalEntries}
@@ -444,18 +429,18 @@ export default function Dashboard() {
               <ArrowUpRight size={20} />
             </div>
           </div>
-          <p className="text-xs text-emerald-600 font-bold mt-auto flex items-center gap-1">
+          <p className="text-xs text-emerald-600 font-bold mt-auto pt-2 flex items-center gap-1">
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block"></span>{" "}
             Acumulado
           </p>
         </div>
 
         {/* CARD 4 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between h-32">
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Saídas ({formattedMonthName})
+                Saídas ({formattedMonthName.substring(0, 3)})
               </p>
               <h3 className="text-3xl font-black text-gray-800 mt-1">
                 {stats.loading ? "..." : stats.totalExits}
@@ -465,7 +450,7 @@ export default function Dashboard() {
               <ArrowDownRight size={20} />
             </div>
           </div>
-          <p className="text-xs text-red-500 font-bold mt-auto flex items-center gap-1">
+          <p className="text-xs text-red-500 font-bold mt-auto pt-2 flex items-center gap-1">
             <span className="w-1.5 h-1.5 bg-red-500 rounded-full inline-block"></span>{" "}
             Acumulado
           </p>
@@ -475,6 +460,7 @@ export default function Dashboard() {
       {/* ÁREA CENTRAL */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
+          {/* O Gráfico geralmente se adapta bem, mas garantimos o container */}
           <OverviewChart data={stats.chartData} />
         </div>
 
@@ -494,7 +480,7 @@ export default function Dashboard() {
             <div className="space-y-3">
               <Link
                 href="/inventory"
-                className="group w-full py-3 px-4 bg-gray-50 hover:bg-red-50 hover:text-red-700 rounded-xl text-sm font-bold text-gray-700 transition-all flex items-center justify-between border border-gray-100 hover:border-red-100"
+                className="group w-full py-3 px-4 bg-gray-50 hover:bg-red-50 hover:text-red-700 rounded-xl text-sm font-bold text-gray-700 transition-all flex items-center justify-between border border-gray-100 hover:border-red-100 active:scale-95"
               >
                 <span className="flex items-center gap-3">
                   <Search size={16} /> Gerenciar Estoque
@@ -506,7 +492,7 @@ export default function Dashboard() {
               </Link>
               <Link
                 href="/log/movimentacoes"
-                className="group w-full py-3 px-4 bg-gray-50 hover:bg-red-50 hover:text-red-700 rounded-xl text-sm font-bold text-gray-700 transition-all flex items-center justify-between border border-gray-100 hover:border-red-100"
+                className="group w-full py-3 px-4 bg-gray-50 hover:bg-red-50 hover:text-red-700 rounded-xl text-sm font-bold text-gray-700 transition-all flex items-center justify-between border border-gray-100 hover:border-red-100 active:scale-95"
               >
                 <span className="flex items-center gap-3">
                   <History size={16} /> Ver Movimentações
@@ -525,7 +511,7 @@ export default function Dashboard() {
             </h3>
             <Link
               href="/log/auditoria"
-              className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100"
+              className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100 active:scale-95"
             >
               <div className="bg-gray-100 text-gray-500 p-3 rounded-lg group-hover:bg-red-50 group-hover:text-red-600 transition-colors">
                 <ShieldCheck size={20} />
