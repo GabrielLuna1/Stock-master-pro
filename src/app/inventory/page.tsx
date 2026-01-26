@@ -250,22 +250,132 @@ export default function InventoryPage() {
     }
   };
 
+  // 💎 FUNÇÃO DE EXPORTAÇÃO PREMIUM (Corrigida)
   const exportToPDF = () => {
     const doc = new jsPDF();
+
+    // ✅ FIX 1: Tipagem explícita [r, g, b] para o TypeScript não reclamar no autoTable
+    const brandRed: [number, number, number] = [220, 38, 38];
+    const brandDark: [number, number, number] = [17, 24, 39];
+    const brandGray: [number, number, number] = [107, 114, 128];
+
+    // --- 1. CABEÇALHO ---
+    doc.setFillColor(brandRed[0], brandRed[1], brandRed[2]);
+    doc.roundedRect(14, 15, 12, 12, 2, 2, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("S", 17.5, 22.5);
+
+    doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("STOCK", 30, 23);
+    doc.setTextColor(brandRed[0], brandRed[1], brandRed[2]);
+    doc.text("MASTER", 51, 23);
+
+    doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    const reportTitle = "RELATÓRIO DE INVENTÁRIO FÍSICO";
+    const pageWidth = doc.internal.pageSize.width;
+    doc.text(reportTitle, pageWidth - 14, 20, { align: "right" });
+
+    doc.setFontSize(8);
+    doc.setTextColor(brandGray[0], brandGray[1], brandGray[2]);
+    const dateStr = `Gerado em: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}`;
+    const userStr = `Por: ${session?.user?.name || "Sistema"}`;
+    doc.text(dateStr, pageWidth - 14, 25, { align: "right" });
+    doc.text(userStr, pageWidth - 14, 29, { align: "right" });
+
+    doc.setDrawColor(229, 231, 235);
+    doc.line(14, 35, pageWidth - 14, 35);
+
+    // --- 2. RESUMO ---
+    doc.setFontSize(9);
+    doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Total de Itens: ${filteredProducts.length}`, 14, 42);
+
+    const totalValue = filteredProducts.reduce(
+      (acc, p) => acc + Number(p.price || 0) * Number(p.quantity || 0),
+      0,
+    );
+    const totalValueStr = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(totalValue);
+    doc.text(`Valor Estimado: ${totalValueStr}`, 80, 42);
+
+    // --- 3. TABELA ---
     const tableData = filteredProducts.map((p) => [
-      new Date(p.createdAt).toLocaleDateString("pt-BR"),
-      p.sku,
+      p.sku.toUpperCase(),
       p.name,
-      p.category || "GERAL",
+      p.category || "Geral",
+      new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }).format(p.price || 0),
       p.quantity,
-      Number(p.quantity) <= Number(p.minStock || 15) ? "REPOSIÇÃO" : "ESTÁVEL",
+      Number(p.quantity) <= Number(p.minStock || 15) ? "BAIXO" : "OK",
     ]);
+
     autoTable(doc, {
-      startY: 20,
-      head: [["Data", "SKU", "Produto", "Categoria", "Qtd", "Status"]],
+      startY: 48,
+      head: [["SKU", "PRODUTO", "CATEGORIA", "PREÇO UN.", "QTD", "STATUS"]],
       body: tableData,
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        font: "helvetica",
+        textColor: [55, 65, 81],
+      },
+      headStyles: {
+        fillColor: brandRed, // ✅ Agora funciona com a tipagem [number, number, number]
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "left",
+      },
+      columnStyles: {
+        0: { fontStyle: "bold", cellWidth: 25 },
+        3: { halign: "right" },
+        4: { halign: "center", fontStyle: "bold" },
+        5: { halign: "center", cellWidth: 20 },
+      },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      didParseCell: function (data) {
+        if (data.section === "body" && data.column.index === 5) {
+          if (data.cell.raw === "BAIXO") {
+            data.cell.styles.textColor = [220, 38, 38];
+            data.cell.styles.fontStyle = "bold";
+          } else {
+            data.cell.styles.textColor = [16, 185, 129];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+      // --- 4. RODAPÉ (Corrigido) ---
+      didDrawPage: function (data) {
+        // ✅ FIX 2: Cast (doc as any) resolve o erro do método getNumberOfPages
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        const currentPage = (doc as any).internal.getCurrentPageInfo()
+          .pageNumber;
+        const str = `Página ${currentPage} de ${pageCount}`;
+
+        doc.setFontSize(8);
+        doc.setTextColor(156, 163, 175);
+        const pageSize = doc.internal.pageSize;
+        const pageHeight = pageSize.height
+          ? pageSize.height
+          : pageSize.getHeight();
+
+        doc.text(str, data.settings.margin.left, pageHeight - 10);
+        doc.text("StockMaster Pro © 2026", pageWidth - 50, pageHeight - 10);
+      },
     });
-    doc.save("inventario.pdf");
+
+    doc.save(`inventario_${new Date().toISOString().split("T")[0]}.pdf`);
   };
 
   const countCritical = products.filter(
