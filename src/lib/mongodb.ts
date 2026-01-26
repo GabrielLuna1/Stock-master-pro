@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 
 // Pegamos a URL que você colocou no .env.local
-
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
@@ -10,6 +9,7 @@ if (!MONGODB_URI) {
   );
 }
 
+// Cache Global para evitar múltiplas conexões no Hot Reload
 let cached = (global as any).mongoose;
 
 if (!cached) {
@@ -18,32 +18,28 @@ if (!cached) {
 
 export async function connectDB() {
   // 1. Se já estiver conectado, apenas retorne a conexão existente
-
   if (cached.conn) {
     return cached.conn;
   }
 
   // 2. Se for a primeira vez, criamos uma nova "promessa" de conexão
-
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false, // Desativa o buffer para erros aparecerem rápido
+      bufferCommands: false,
+      maxPoolSize: 10, // 👈 O SEGREDO: Limita a 10 conexões simultâneas (evita o ECONNRESET)
     };
 
     cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
       console.log("🚀 Conectado ao MongoDB com sucesso!");
-
       return mongoose;
     });
   }
 
   // 3. Aguardamos a conexão finalizar e guardamos no cache
-
   try {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
-
     throw e;
   }
 
