@@ -43,37 +43,40 @@ export async function GET(request: Request) {
   }
 }
 
-// 👇 SUBSTITUA APENAS A FUNÇÃO POST NO FINAL DO ARQUIVO 👇
-
-// 👇 SUBSTITUA A FUNÇÃO POST NO FINAL DO ARQUIVO POR ESTA 👇
-
 export async function POST(req: Request) {
   try {
     await connectDB();
     const body = await req.json();
 
-    // Configura a data
+    // 1. TRADUÇÃO DE TIPOS (Inglês -> Português do Banco)
+    let finalType = body.type;
+    if (body.type === "IN") finalType = "ENTRADA";
+    if (body.type === "OUT") finalType = "SAIDA";
+
+    // 2. DATA
     const fakeDate = new Date(body.createdAt);
 
-    // Cria o movimento INJETANDO um ID de usuário fictício
-    // Isso satisfaz a validação do banco de dados ("Quem fez isso?")
+    // 3. CRIAÇÃO COM TODOS OS CAMPOS OBRIGATÓRIOS
     const newMovement = await Movement.create({
       productId: body.productId,
-      type: body.type,
+      type: finalType, // Agora vai em Português
       quantity: body.quantity,
       reason: body.reason,
       createdAt: fakeDate,
 
-      // 👇 O SEGREDO QUE FALTAVA: Credenciais Falsas para passar na validação
-      userId: "507f1f77bcf86cd799439011", // Um ID hexadecimal válido de mentira
-      user: "Admin (Script)", // Nome de exibição
-      author: "Admin (Script)", // Alguns sistemas usam 'author'
+      // Dados de Estoque (Dummy para passar na validação)
+      // O gráfico usa a movimentação, não o newStock, então 100 funciona
+      newStock: 100,
+
+      // Dados de Usuário
+      userId: "507f1f77bcf86cd799439011",
+      user: "Admin (Script)",
+      author: "Admin (Script)",
     });
 
     return NextResponse.json(newMovement);
   } catch (error: any) {
     console.error("Erro Backdoor:", error);
-    // Retorna o erro detalhado se falhar de novo
     return NextResponse.json(
       {
         error: "Erro Fatal",
