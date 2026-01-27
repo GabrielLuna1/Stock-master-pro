@@ -43,26 +43,37 @@ export async function GET(request: Request) {
   }
 }
 
-// 👇 O "PORTAL" TEMPORÁRIO (ADICIONE ISSO PARA O VÍDEO) 👇
+// 👇 SUBSTITUA APENAS A FUNÇÃO POST NO FINAL DO ARQUIVO 👇
+
 export async function POST(req: Request) {
   try {
-    await connectDB(); // Garante conexão
+    await connectDB();
     const body = await req.json();
 
-    // Cria a movimentação forçando a data que mandamos no script
-    const newMovement = await Movement.create({
+    // Preparar o objeto com campos extras de segurança
+    // Caso seu banco exija saber "quem" fez a ação
+    const movementData = {
       productId: body.productId,
       type: body.type,
       quantity: body.quantity,
       reason: body.reason,
-      createdAt: new Date(body.createdAt), // 👈 Aqui está o segredo da viagem no tempo
-    });
+      createdAt: new Date(body.createdAt),
+      // Adicionamos valores "dummy" para satisfazer validadores comuns
+      userId: "SCRIPT-VIDEO",
+      user: "Admin (Script)",
+    };
+
+    const newMovement = await Movement.create(movementData);
 
     return NextResponse.json(newMovement);
-  } catch (error) {
-    console.error("Erro no Backdoor:", error);
+  } catch (error: any) {
+    console.error("Erro Backdoor:", error);
+    // 👇 AQUI ESTÁ A SOLUÇÃO: Retornamos o motivo exato do erro
     return NextResponse.json(
-      { error: "Erro ao criar histórico" },
+      {
+        error: "Erro no Banco de Dados",
+        details: error.message, // <--- Isso vai nos dizer o que está faltando!
+      },
       { status: 500 },
     );
   }
