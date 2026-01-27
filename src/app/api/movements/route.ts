@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Movement from "@/models/Movement";
+import Product from "@/models/Product";
 
 // --- MÉTODO EXISTENTE (NÃO MEXEMOS) ---
 export async function GET(request: Request) {
@@ -48,30 +49,45 @@ export async function POST(req: Request) {
     await connectDB();
     const body = await req.json();
 
-    // 1. TRADUÇÃO DE TIPOS (Inglês -> Português do Banco)
-    let finalType = body.type;
-    if (body.type === "IN") finalType = "ENTRADA";
-    if (body.type === "OUT") finalType = "SAIDA";
+    // 1. Busca o Produto para pegar o nome real
+    const product = await Product.findById(body.productId);
+    if (!product) throw new Error("Produto não encontrado");
 
-    // 2. DATA
-    const fakeDate = new Date(body.createdAt);
+    // 2. Prepara os dados calculados (Fake para o histórico)
+    // O banco exige oldStock e newStock. Vamos inventar números baseados na quantidade.
+    const currentQty = product.quantity || 0;
+    const movedQty = Number(body.quantity);
 
-    // 3. CRIAÇÃO COM TODOS OS CAMPOS OBRIGATÓRIOS
+    // Se for entrada, o antigo era menor. Se for saída, o antigo era maior.
+    const isInput = body.type === "ENTRADA" || body.type === "IN";
+
+    const oldStockCalc = isInput
+      ? currentQty - movedQty
+      : currentQty + movedQty;
+    const newStockCalc = currentQty; // Assume que o produto já está atualizado hoje
+
+    // 3. CRIAÇÃO COM TODOS OS CAMPOS (TUDO O QUE O ERRO PEDIU)
     const newMovement = await Movement.create({
+      // Vínculos
       productId: body.productId,
-      type: finalType, // Agora vai em Português
-      quantity: body.quantity,
+      productName: product.name, // <--- O banco pediu isso!
+
+      // Dados da Ação
+      type: isInput ? "ENTRADA" : "SAIDA", // Força português
+      quantity: movedQty,
       reason: body.reason,
-      createdAt: fakeDate,
 
-      // Dados de Estoque (Dummy para passar na validação)
-      // O gráfico usa a movimentação, não o newStock, então 100 funciona
-      newStock: 100,
+      // Saldos (Matemática Fake para passar na validação)
+      oldStock: oldStockCalc > 0 ? oldStockCalc : 0,
+      newStock: newStockCalc,
 
-      // Dados de Usuário
+      // Dados de Usuário (O banco pediu userName)
       userId: "507f1f77bcf86cd799439011",
-      user: "Admin (Script)",
-      author: "Admin (Script)",
+      userName: "Gabriel Luna (Admin)", // <--- O banco pediu isso!
+      user: "Gabriel Luna",
+
+      // Data
+      createdAt: new Date(body.createdAt),
     });
 
     return NextResponse.json(newMovement);
