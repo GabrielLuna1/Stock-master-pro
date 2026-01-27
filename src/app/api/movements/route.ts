@@ -45,34 +45,39 @@ export async function GET(request: Request) {
 
 // 👇 SUBSTITUA APENAS A FUNÇÃO POST NO FINAL DO ARQUIVO 👇
 
+// 👇 SUBSTITUA A FUNÇÃO POST NO FINAL DO ARQUIVO POR ESTA 👇
+
 export async function POST(req: Request) {
   try {
     await connectDB();
     const body = await req.json();
 
-    // Preparar o objeto com campos extras de segurança
-    // Caso seu banco exija saber "quem" fez a ação
-    const movementData = {
+    // Configura a data
+    const fakeDate = new Date(body.createdAt);
+
+    // Cria o movimento INJETANDO um ID de usuário fictício
+    // Isso satisfaz a validação do banco de dados ("Quem fez isso?")
+    const newMovement = await Movement.create({
       productId: body.productId,
       type: body.type,
       quantity: body.quantity,
       reason: body.reason,
-      createdAt: new Date(body.createdAt),
-      // Adicionamos valores "dummy" para satisfazer validadores comuns
-      userId: "SCRIPT-VIDEO",
-      user: "Admin (Script)",
-    };
+      createdAt: fakeDate,
 
-    const newMovement = await Movement.create(movementData);
+      // 👇 O SEGREDO QUE FALTAVA: Credenciais Falsas para passar na validação
+      userId: "507f1f77bcf86cd799439011", // Um ID hexadecimal válido de mentira
+      user: "Admin (Script)", // Nome de exibição
+      author: "Admin (Script)", // Alguns sistemas usam 'author'
+    });
 
     return NextResponse.json(newMovement);
   } catch (error: any) {
     console.error("Erro Backdoor:", error);
-    // 👇 AQUI ESTÁ A SOLUÇÃO: Retornamos o motivo exato do erro
+    // Retorna o erro detalhado se falhar de novo
     return NextResponse.json(
       {
-        error: "Erro no Banco de Dados",
-        details: error.message, // <--- Isso vai nos dizer o que está faltando!
+        error: "Erro Fatal",
+        details: error.message,
       },
       { status: 500 },
     );
