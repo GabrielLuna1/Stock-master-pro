@@ -119,19 +119,29 @@ export default function InventoryPage() {
 
   // --- LÓGICA DE FILTRAGEM ---
   const filteredProducts = products.filter((p) => {
+    // 1. Filtro de Texto
     const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesCategory =
-      selectedCategory === "TODAS" || p.category === selectedCategory;
+    // 2. Filtro de Categoria (AGORA MAIS ROBUSTO)
+    // Comparamos transformando tudo para minúsculo e sem espaços nas pontas
+    const productCat = p.category
+      ? p.category.toString().trim().toLowerCase()
+      : "";
+    const selectedCat = selectedCategory.toString().trim().toLowerCase();
 
+    const matchesCategory =
+      selectedCategory === "TODAS" || productCat === selectedCat;
+
+    // 3. Filtro de Status
     let matchesStatus = true;
     if (filterStatus === "CRITICAL")
       matchesStatus = Number(p.quantity) <= Number(p.minStock || 15);
     else if (filterStatus === "STABLE")
       matchesStatus = Number(p.quantity) > Number(p.minStock || 15);
 
+    // 4. Filtro de Data
     let matchesDate = true;
     if (startDate || endDate) {
       const productDate = new Date(p.createdAt);
