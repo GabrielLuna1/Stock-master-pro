@@ -4,60 +4,87 @@ import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-// 👇 O Espião de Segurança
-import SystemLog from "@/models/SystemLog";
+import SystemLog from "@/models/SystemLog"; // ✅ Importação correta
 
-// PUT: Editar Usuário (Com Auditoria e Criptografia)
+// PUT: Editar Usuário (Com Trava de Segurança e Log Blindado)
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }, // ⚡️ Padrão Next.js 15
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getServerSession(authOptions);
     const adminUser = session?.user as any;
 
-    // 1. Trava de Segurança: Só Admin edita
+    // 1. Trava Básica
     if (adminUser?.role !== "admin") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     }
 
     await connectDB();
-    const { id } = await params; // ⚡️ Await no params
+    const { id } = await params;
     const data = await request.json();
 
-    // 2. Prepara o objeto de atualização
-    const updateData: any = {
-      name: data.name,
-      email: data.email,
-      role: data.role,
-      active: data.active,
-    };
+    // 2. Busca o alvo antes (para travar o Super Admin)
+    const targetUser = await User.findById(id);
 
-    // 3. 🔒 Se vier senha nova, criptografa
-    if (data.password && data.password.trim() !== "") {
-      updateData.password = await bcrypt.hash(data.password, 10);
-    }
-
-    // 4. Atualiza o usuário
-    const updatedUser = await User.findByIdAndUpdate(id, updateData, {
-      new: true,
-    }).select("-password");
-
-    if (!updatedUser) {
+    if (!targetUser) {
       return NextResponse.json(
         { error: "Usuário não encontrado" },
         { status: 404 },
       );
     }
 
-    // 5. 🕵️‍♂️ LOG DE AUDITORIA (Edição)
-    await SystemLog.create({
-      action: "USER_UPDATE", // Vamos usar o ícone genérico ou criar um novo se quiser
-      description: `Editou perfil de: ${updatedUser.name} (${updatedUser.role})`,
-      userId: adminUser.id || adminUser.email,
-      userName: adminUser.name,
-      level: "warning", // Amarelo, pois é uma ação administrativa sensível
-    });
+    // 🛡️ TRAVA SUPREMA
+    if (targetUser.email === "admin@stockmaster.com") {
+      if (adminUser.email !== "admin@stockmaster.com") {
+        return NextResponse.json(
+          { error: "🚫 AÇÃO NEGADA: Você não pode modificar o Super Admin." },
+          { status: 403 },
+        );
+      }
+    }
+
+    // 3. Prepara dados
+    const updateData: any = {
+      name: data.name,
+      role: data.role,
+      active: data.active,
+      email:
+        targetUser.email === "admin@stockmaster.com"
+          ? targetUser.email
+          : data.email,
+    };
+
+    if (data.password && data.password.trim() !== "") {
+      updateData.password = await bcrypt.hash(data.password, 10);
+    }
+
+    // 4. Executa atualização
+    const updatedUser = await User.findByIdAndUpdate(id, updateData, {
+      new: true,
+    }).select("-password");
+
+    // 👇 CORREÇÃO AQUI: Verificamos se a atualização funcionou antes de logar
+    if (!updatedUser) {
+      return NextResponse.json(
+        { error: "Erro ao atualizar usuário" },
+        { status: 404 },
+      );
+    }
+
+    // 5. Log Blindado
+    try {
+      await SystemLog.create({
+        action: "USER_UPDATE",
+        // 👇 Usamos ?. para evitar o erro se algo vier nulo
+        description: `Editou perfil de: ${updatedUser?.name} (${updatedUser?.role})`,
+        userId: adminUser?.id || adminUser?.email || "unknown_admin",
+        userName: adminUser?.name || "Admin",
+        level: "warning",
+      });
+    } catch (logError) {
+      console.error("Erro de log ignorado:", logError);
+    }
 
     return NextResponse.json(updatedUser);
   } catch (error: any) {
@@ -65,24 +92,22 @@ export async function PUT(
   }
 }
 
-// DELETE: Excluir Usuário (Com Auditoria)
+// DELETE: Excluir Usuário (Com Proteção)
 export async function DELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }, // ⚡️ Padrão Next.js 15
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getServerSession(authOptions);
     const adminUser = session?.user as any;
     const currentUserId = adminUser?.id;
 
-    // 1. Trava: Só Admin deleta
     if (adminUser?.role !== "admin") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
     }
 
-    const { id } = await params; // ⚡️ Await no params
+    const { id } = await params;
 
-    // 2. Trava: Não pode se deletar
     if (id === currentUserId) {
       return NextResponse.json(
         { error: "Você não pode excluir a si mesmo." },
@@ -92,7 +117,6 @@ export async function DELETE(
 
     await connectDB();
 
-    // 3. Busca o alvo antes de deletar (para pegar o nome pro log)
     const targetUser = await User.findById(id);
     if (!targetUser) {
       return NextResponse.json(
@@ -101,17 +125,28 @@ export async function DELETE(
       );
     }
 
-    // 4. Deleta
+    // 🛡️ TRAVA DE SEGURANÇA SUPREMA NO DELETE 🛡️
+    if (targetUser.email === "admin@stockmaster.com") {
+      return NextResponse.json(
+        { error: "🚫 CRÍTICO: O Super Admin nunca pode ser excluído." },
+        { status: 403 },
+      );
+    }
+
     await User.findByIdAndDelete(id);
 
-    // 5. 🕵️‍♂️ LOG DE AUDITORIA (Exclusão)
-    await SystemLog.create({
-      action: "USER_DELETE",
-      description: `Excluiu o usuário: ${targetUser.name} (${targetUser.email})`,
-      userId: adminUser.id || adminUser.email,
-      userName: adminUser.name,
-      level: "critical", // 🔴 Vermelho Crítico
-    });
+    // LOG DE EXCLUSÃO BLINDADO
+    try {
+      await SystemLog.create({
+        action: "USER_DELETE",
+        description: `Excluiu o usuário: ${targetUser.name} (${targetUser.email})`,
+        userId: adminUser?.id || adminUser?.email || "unknown_admin",
+        userName: adminUser?.name || "Admin",
+        level: "critical",
+      });
+    } catch (logError) {
+      console.error("Erro ao salvar log de delete:", logError);
+    }
 
     return NextResponse.json({ message: "Usuário excluído" });
   } catch (error: any) {

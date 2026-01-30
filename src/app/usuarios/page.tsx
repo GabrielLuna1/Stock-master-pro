@@ -11,11 +11,13 @@ import {
   Trash2,
   Plus,
   Loader2,
-  Lock,
   Briefcase,
   CheckSquare,
   Square,
   X,
+  Shield,
+  ChevronLeft, // 👈 Novo ícone
+  ChevronRight, // 👈 Novo ícone
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,7 +27,6 @@ import AddUserModal from "@/components/users/AddUserModal";
 import DeleteUserModal from "@/components/users/DeleteUserModal";
 import BatchDeleteModal from "@/components/inventory/BatchDeleteModal";
 
-// 👇 IMPORT NOVO (O Segredo do Responsivo)
 import { DataDisplay } from "@/components/ui/DataDisplay";
 
 interface IUser {
@@ -36,11 +37,19 @@ interface IUser {
   active: boolean;
 }
 
+const ITEMS_PER_PAGE = 20; // ⚡️ Limite fixo por página
+
 export default function UsersPage() {
   const { data: session } = useSession();
+  const currentUserEmail = session?.user?.email;
+  const currentUserId = (session?.user as any)?.id;
+
   const [users, setUsers] = useState<IUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1); // 📄 Página Atual
 
   // Filtros e Seleção
   const [filterRole, setFilterRole] = useState<"ALL" | "admin" | "operador">(
@@ -50,7 +59,7 @@ export default function UsersPage() {
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
 
-  // Modais Individuais
+  // Modais
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<IUser | null>(null);
@@ -76,6 +85,12 @@ export default function UsersPage() {
     fetchUsers();
   }, []);
 
+  // 👇 RESETA A PÁGINA AO FILTRAR
+  // Se eu buscar algo, tenho que voltar para a página 1 para ver o resultado
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterRole]);
+
   // --- LÓGICA DE FILTRAGEM ---
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -85,10 +100,18 @@ export default function UsersPage() {
     return matchesSearch && matchesRole;
   });
 
+  // --- LÓGICA DE PAGINAÇÃO (Corte do Array) ---
+  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedUsers = filteredUsers.slice(
+    startIndex,
+    startIndex + ITEMS_PER_PAGE,
+  );
+
   // --- LÓGICA DE SELEÇÃO ---
   const isSelectable = (user: IUser) => {
     const isSupreme = user.email === "admin@stockmaster.com";
-    const isMe = (session?.user as any)?.id === user._id;
+    const isMe = currentUserId === user._id;
     return !isSupreme && !isMe;
   };
 
@@ -130,7 +153,7 @@ export default function UsersPage() {
       toast.error("Ação Proibida: O Admin Supremo não pode ser excluído.");
       return;
     }
-    if (user._id === (session?.user as any)?.id) {
+    if (user._id === currentUserId) {
       toast.error("Você não pode excluir seu próprio usuário.");
       return;
     }
@@ -169,7 +192,6 @@ export default function UsersPage() {
   const countAdmin = users.filter((u) => u.role === "admin").length;
   const countOperador = users.filter((u) => u.role === "operador").length;
 
-  // 👇 CONFIGURAÇÃO DAS COLUNAS (O Segredo do DataDisplay)
   const columns = [
     {
       header: "Select",
@@ -197,7 +219,7 @@ export default function UsersPage() {
       accessorKey: "name" as keyof IUser,
       cell: (user: IUser) => {
         const isSupreme = user.email === "admin@stockmaster.com";
-        const isMe = (session?.user as any)?.id === user._id;
+        const isMe = currentUserId === user._id;
         return (
           <div className="flex items-center gap-3">
             <div
@@ -263,6 +285,54 @@ export default function UsersPage() {
           <CheckCircle2 size={10} /> ATIVO
         </span>
       ),
+    },
+    {
+      header: "Ações",
+      accessorKey: "actions" as keyof IUser,
+      cell: (user: IUser) => {
+        const isTargetSupreme = user.email === "admin@stockmaster.com";
+        const amISupreme = currentUserEmail === "admin@stockmaster.com";
+        const isMe = user._id === currentUserId;
+
+        const canEdit = !isTargetSupreme || amISupreme;
+        const canDelete = !isTargetSupreme && !isMe;
+
+        if (!canEdit) {
+          return (
+            <div
+              className="flex items-center gap-2 text-gray-300 select-none cursor-not-allowed"
+              title="Apenas o Super Admin pode modificar este usuário."
+            >
+              <Shield size={18} />
+              <span className="text-[10px] font-bold uppercase tracking-widest">
+                Intocável
+              </span>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleEdit(user)}
+              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Editar usuário"
+            >
+              <Pencil size={18} />
+            </button>
+
+            {canDelete && (
+              <button
+                onClick={() => handleDeleteClick(user)}
+                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Excluir usuário"
+              >
+                <Trash2 size={18} />
+              </button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -342,25 +412,67 @@ export default function UsersPage() {
       </div>
 
       {/* ⚡ LISTAGEM RESPONSIVA (DataDisplay) */}
-      <div className="flex-1">
+      <div className="flex-1 flex flex-col gap-4">
         {loading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-gray-200" size={40} />
           </div>
         ) : (
-          <DataDisplay
-            data={filteredUsers}
-            columns={columns}
-            titleField="name"
-            subtitleField="email"
-            onEdit={handleEdit}
-            onDelete={(user) => {
-              const isSupreme = user.email === "admin@stockmaster.com";
-              const isMe = (session?.user as any)?.id === user._id;
-              if (isSupreme || isMe) return; // Não mostra botão delete
-              handleDeleteClick(user);
-            }}
-          />
+          <>
+            {/* ⚡️ Passamos os dados PAGINADOS aqui */}
+            <DataDisplay
+              data={paginatedUsers}
+              columns={columns}
+              titleField="name"
+              subtitleField="email"
+            />
+
+            {/* 👇 RODAPÉ DE PAGINAÇÃO */}
+            {filteredUsers.length > ITEMS_PER_PAGE && (
+              <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <p className="text-xs text-gray-500 font-medium">
+                  Mostrando{" "}
+                  <span className="font-bold text-gray-900">
+                    {startIndex + 1}
+                  </span>{" "}
+                  a{" "}
+                  <span className="font-bold text-gray-900">
+                    {Math.min(
+                      startIndex + ITEMS_PER_PAGE,
+                      filteredUsers.length,
+                    )}
+                  </span>{" "}
+                  de{" "}
+                  <span className="font-bold text-gray-900">
+                    {filteredUsers.length}
+                  </span>{" "}
+                  usuários
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronLeft size={16} className="text-gray-600" />
+                  </button>
+                  <span className="text-sm font-bold text-gray-900 px-2">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronRight size={16} className="text-gray-600" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

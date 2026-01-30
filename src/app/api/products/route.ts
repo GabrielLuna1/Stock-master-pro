@@ -6,19 +6,51 @@ import Movement from "@/models/Movement";
 import SystemLog from "@/models/SystemLog";
 import { authOptions } from "@/lib/auth";
 
-// 1. GET SIMPLIFICADO
-export async function GET() {
+// 1. GET OMNIPOTENTE (Traz tudo por padrão para não falhar o alerta)
+export async function GET(request: Request) {
   try {
     await connectDB();
-    const products = await Product.find({}).sort({ createdAt: -1 });
+    const { searchParams } = new URL(request.url);
+
+    // 👇 A MUDANÇA: Se o Sidebar pedir 1000, usa 1000.
+    // Se a tabela não pedir nada (undefined), usamos 10000 (TUDO).
+    // Só usamos limite pequeno se for explicitamente pedido.
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam) : 10000;
+
+    // Filtros de busca
+    const filter: any = {};
+    const query = searchParams.get("query");
+    const category = searchParams.get("category");
+
+    if (query) {
+      filter.$or = [
+        { name: { $regex: query, $options: "i" } },
+        { sku: { $regex: query, $options: "i" } },
+      ];
+    }
+
+    if (category && category !== "all") {
+      filter.category = category;
+    }
+
+    // Busca no banco
+    const products = await Product.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    // Retorna Array direto (para não quebrar sua tabela)
     return NextResponse.json(products);
   } catch (error) {
     console.error("Erro no GET Products:", error);
-    return NextResponse.json({ error: "Erro ao buscar" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Erro ao buscar produtos" },
+      { status: 500 },
+    );
   }
 }
 
-// 2. POST COM REGRA DE NEGÓCIO AJUSTADA (Histórico Completo)
+// 2. POST (Mantido igual)
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -30,24 +62,19 @@ export async function POST(request: Request) {
     await connectDB();
     const data = await request.json();
 
-    // Dados do usuário logado
     const user = session.user as any;
     const userId = user.id || user.email;
 
-    // 1. Cria o Produto
     const newProduct = await Product.create({
       ...data,
       createdBy: userId,
       lastModifiedBy: userId,
     });
 
-    // 2. Gera Movimentação de Estoque (SEMPRE GERA, MESMO SE FOR 0)
-    // Regra: Todo nascimento de produto deve constar na linha do tempo
     await Movement.create({
       productId: newProduct._id,
-      // Usamos "criacao" para aparecer no filtro de Cadastros e na Linha do Tempo como azul
       type: "criacao",
-      quantity: newProduct.quantity, // Pode ser 0, sem problemas
+      quantity: newProduct.quantity,
       oldStock: 0,
       newStock: newProduct.quantity,
       userName: user.name,
@@ -55,7 +82,6 @@ export async function POST(request: Request) {
       productName: newProduct.name,
     });
 
-    // 3. O ESPIÃO (Grava na Auditoria Geral)
     await SystemLog.create({
       action: "PRODUCT_CREATE",
       description: `Cadastrou novo produto: ${newProduct.name} (SKU: ${newProduct.sku})`,
