@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
+import { toast } from "sonner";
+
 import {
   ShieldCheck,
   FileText,
@@ -20,14 +23,19 @@ import {
   ChevronRight,
   Check,
   X,
+  Ghost,
 } from "lucide-react";
 
-// 👇 Importação do Componente Híbrido
 import { DataDisplay } from "@/components/ui/DataDisplay";
 
 export default function AuditoriaPage() {
+  const { data: session } = useSession();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Estados do Modal de Exclusão
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [logToDelete, setLogToDelete] = useState<string | null>(null);
 
   // Filtros e Paginação
   const [filterDate, setFilterDate] = useState("");
@@ -39,20 +47,53 @@ export default function AuditoriaPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
+  const fetchLogs = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/system-logs");
+      const data = await res.json();
+      setLogs(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao carregar auditoria.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetch("/api/system-logs")
-      .then((res) => res.json())
-      .then((data) => {
-        setLogs(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoading(false);
-      });
+    fetchLogs();
   }, []);
 
-  // Resetar página quando mudar filtro
+  // 1. SOLICITAR EXCLUSÃO (Abre o Modal)
+  const handleRequestDelete = (logId: string) => {
+    setLogToDelete(logId);
+    setIsDeleteModalOpen(true);
+  };
+
+  // 2. CONFIRMAR EXCLUSÃO (Executa a ação)
+  const confirmDelete = async () => {
+    if (!logToDelete) return;
+
+    try {
+      const res = await fetch(`/api/system-logs?id=${logToDelete}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("Registro removido da existência. 👻");
+        fetchLogs();
+        setIsDeleteModalOpen(false);
+        setLogToDelete(null);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Falha ao apagar.");
+      }
+    } catch (error) {
+      toast.error("Erro de comunicação.");
+    }
+  };
+
   useEffect(() => {
     setCurrentPage(1);
   }, [filterDate, selectedLevels]);
@@ -75,7 +116,6 @@ export default function AuditoriaPage() {
     });
   };
 
-  // 🧠 LÓGICA DE FILTRAGEM
   const filteredLogs = logs.filter((log) => {
     if (filterDate) {
       const logDate = new Date(log.createdAt).toISOString().split("T")[0];
@@ -85,12 +125,10 @@ export default function AuditoriaPage() {
     return true;
   });
 
-  // 🧠 LÓGICA DE PAGINAÇÃO
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentLogs = filteredLogs.slice(startIndex, startIndex + itemsPerPage);
 
-  // 👇 HELPER VISUAL (Mantido da sua versão original)
   const getActionStyle = (action: string) => {
     switch (action) {
       case "PDF_EXPORT":
@@ -168,7 +206,6 @@ export default function AuditoriaPage() {
     }
   };
 
-  // 👇 DEFINIÇÃO DAS COLUNAS PARA O DataDisplay
   const columns = [
     {
       header: "Data/Hora",
@@ -240,6 +277,26 @@ export default function AuditoriaPage() {
         );
       },
     },
+    // COLUNA GOD MODE
+    {
+      header: "",
+      accessorKey: "_id" as keyof any,
+      cell: (log: any) => {
+        // VERIFIQUE SE O EMAIL AQUI ESTÁ CORRETO COM O SEU DE LOGIN
+        if (session?.user?.email === "admin@stockmaster.com") {
+          return (
+            <button
+              onClick={() => handleRequestDelete(log._id)}
+              className="p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
+              title="Apagar Registro (Silenciosamente)"
+            >
+              <Trash2 size={16} />
+            </button>
+          );
+        }
+        return null;
+      },
+    },
   ];
 
   return (
@@ -264,7 +321,6 @@ export default function AuditoriaPage() {
 
       {/* ÁREA DE FILTROS */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-        {/* Filtro de Data */}
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 w-full md:w-auto">
             <Filter size={16} className="text-gray-400" />
@@ -287,42 +343,34 @@ export default function AuditoriaPage() {
             )}
           </div>
         </div>
-
-        {/* Botões de Nível */}
         <div className="flex flex-wrap gap-2 w-full md:w-auto justify-start md:justify-end">
-          <span className="text-[10px] font-bold text-gray-400 uppercase mr-2 flex items-center">
-            Exibir:
-          </span>
-
           <button
             onClick={() => toggleLevel("info")}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all border ${selectedLevels.includes("info") ? "bg-blue-500 text-white border-blue-600 shadow-md shadow-blue-200" : "bg-white text-gray-400 border-gray-200"}`}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all border ${selectedLevels.includes("info") ? "bg-blue-500 text-white border-blue-600 shadow-md" : "bg-white text-gray-400 border-gray-200"}`}
           >
             {selectedLevels.includes("info") && <Check size={12} />} INFO
           </button>
-
           <button
             onClick={() => toggleLevel("warning")}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all border ${selectedLevels.includes("warning") ? "bg-amber-500 text-white border-amber-600 shadow-md shadow-amber-200" : "bg-white text-gray-400 border-gray-200"}`}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all border ${selectedLevels.includes("warning") ? "bg-amber-500 text-white border-amber-600 shadow-md" : "bg-white text-gray-400 border-gray-200"}`}
           >
             {selectedLevels.includes("warning") && <Check size={12} />} ALERTA
           </button>
-
           <button
             onClick={() => toggleLevel("critical")}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all border ${selectedLevels.includes("critical") ? "bg-red-600 text-white border-red-700 shadow-md shadow-red-200" : "bg-white text-gray-400 border-gray-200"}`}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all border ${selectedLevels.includes("critical") ? "bg-red-600 text-white border-red-700 shadow-md" : "bg-white text-gray-400 border-gray-200"}`}
           >
             {selectedLevels.includes("critical") && <Check size={12} />} CRÍTICO
           </button>
         </div>
       </div>
 
-      {/* ⚡ TABELA RESPONSIVA (DataDisplay) */}
+      {/* TABELA */}
       <div className="flex-1">
         {loading ? (
           <div className="p-20 text-center animate-pulse text-gray-400 font-bold flex flex-col items-center gap-2">
-            <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
-            Carregando registros...
+            <div className="h-8 w-8 bg-gray-200 rounded-full"></div> Carregando
+            registros...
           </div>
         ) : (
           <DataDisplay
@@ -346,7 +394,6 @@ export default function AuditoriaPage() {
           </div>
           <span className="hidden md:inline">Anterior</span>
         </button>
-
         <div className="flex flex-col items-center">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
             Página Atual
@@ -359,7 +406,6 @@ export default function AuditoriaPage() {
             <span className="font-bold text-gray-500">{totalPages || 1}</span>
           </div>
         </div>
-
         <button
           onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
           disabled={currentPage === totalPages || loading || totalPages === 0}
@@ -371,6 +417,48 @@ export default function AuditoriaPage() {
           </div>
         </button>
       </div>
+
+      {/* 💀 MODAL "GOD MODE" (EXCLUSÃO) */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 border-2 border-red-100 scale-100 animate-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-600 animate-pulse">
+                <Ghost size={32} />
+              </div>
+
+              <div>
+                <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">
+                  Exclusão Fantasma
+                </h3>
+                <p className="text-sm text-gray-500 mt-2 font-medium">
+                  Você está prestes a apagar um registro de auditoria. Essa ação
+                  <span className="text-red-600 font-bold">
+                    {" "}
+                    não gera novos logs{" "}
+                  </span>
+                  e é irreversível.
+                </p>
+              </div>
+
+              <div className="flex gap-3 w-full mt-2">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors text-sm"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm"
+                >
+                  <Trash2 size={16} /> APAGAR
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
