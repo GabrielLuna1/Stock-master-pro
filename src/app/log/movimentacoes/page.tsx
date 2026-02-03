@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react"; // 👈 Import necessário
+import { toast } from "sonner"; // 👈 Feedback visual
+
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -17,16 +20,21 @@ import {
   ShieldAlert,
   ArrowRightLeft,
   X,
+  Ghost, // 👻 Ícone do Modo Deus
 } from "lucide-react";
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-// 👇 IMPORT NOVO
 import { DataDisplay } from "@/components/ui/DataDisplay";
 
 export default function MovimentacoesPage() {
+  const { data: session } = useSession(); // 👈 Pegar dados do usuário logado
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Estados do Modal "God Mode"
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [movementToDelete, setMovementToDelete] = useState<string | null>(null);
 
   // Paginação
   const [page, setPage] = useState(1);
@@ -58,6 +66,34 @@ export default function MovimentacoesPage() {
     fetchLogs();
   }, []);
 
+  // 👇 LÓGICA DE EXCLUSÃO (GOD MODE)
+  const handleRequestDelete = (id: string) => {
+    setMovementToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!movementToDelete) return;
+
+    try {
+      const res = await fetch(`/api/movements?id=${movementToDelete}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("Movimentação apagada da existência. 👻");
+        fetchLogs(); // Recarrega a lista
+        setIsDeleteModalOpen(false);
+        setMovementToDelete(null);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Erro ao excluir.");
+      }
+    } catch (error) {
+      toast.error("Erro de comunicação.");
+    }
+  };
+
   // Lógica de Filtragem
   const filteredLogs = logs.filter((log) => {
     if (startDate || endDate) {
@@ -83,6 +119,7 @@ export default function MovimentacoesPage() {
   const startIndex = (page - 1) * itemsPerPage;
   const currentLogs = filteredLogs.slice(startIndex, startIndex + itemsPerPage);
 
+  // Contadores para os botões de filtro
   const countEntry = logs.filter((l) =>
     ["entrada", "ajuste_entrada"].includes(l.type),
   ).length;
@@ -176,7 +213,7 @@ export default function MovimentacoesPage() {
     doc.save(`movimentacoes-${filterType.toLowerCase()}.pdf`);
   };
 
-  // 👇 DEFINIÇÃO DAS COLUNAS PARA O DataDisplay
+  // 👇 DEFINIÇÃO DAS COLUNAS (COM O BOTÃO SECRETO)
   const columns = [
     {
       header: "Data/Hora",
@@ -254,10 +291,30 @@ export default function MovimentacoesPage() {
           </span>
         ),
     },
+    // 👇👇 COLUNA SECRETA DO MODO DEUS 👇👇
+    {
+      header: "",
+      accessorKey: "_id" as keyof any,
+      cell: (log: any) => {
+        // Verifica se é o Admin Supremo
+        if (session?.user?.email === "admin@stockmaster.com") {
+          return (
+            <button
+              onClick={() => handleRequestDelete(log._id)}
+              className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+              title="Apagar Movimentação (Silenciosamente)"
+            >
+              <Trash2 size={16} />
+            </button>
+          );
+        }
+        return null;
+      },
+    },
   ];
 
   return (
-    <div className="p-4 md:p-12 min-h-screen bg-gray-50/50 flex flex-col pb-24">
+    <div className="p-4 md:p-12 min-h-screen bg-gray-50/50 flex flex-col pb-24 relative">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -317,7 +374,7 @@ export default function MovimentacoesPage() {
           </div>
         </div>
 
-        {/* Botões de Tipo (Scroll Horizontal no Mobile) */}
+        {/* Botões de Tipo */}
         <div className="flex gap-2 pt-4 border-t border-gray-50 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
           <button
             onClick={() => {
@@ -387,7 +444,7 @@ export default function MovimentacoesPage() {
         </div>
       </div>
 
-      {/* ⚡ TABELA RESPONSIVA (DataDisplay) */}
+      {/* ⚡ TABELA RESPONSIVA */}
       <div className="flex-1">
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center p-20 text-gray-400 animate-pulse">
@@ -399,7 +456,7 @@ export default function MovimentacoesPage() {
             data={currentLogs}
             columns={columns}
             titleField="productName"
-            subtitleField="type" // Tipo aparecerá abaixo do nome no card
+            subtitleField="type"
           />
         )}
       </div>
@@ -416,7 +473,6 @@ export default function MovimentacoesPage() {
           </div>
           <span className="hidden md:inline">Anterior</span>
         </button>
-
         <div className="flex flex-col items-center">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
             Página Atual
@@ -427,7 +483,6 @@ export default function MovimentacoesPage() {
             <span className="font-bold text-gray-500">{totalPages || 1}</span>
           </div>
         </div>
-
         <button
           onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
           disabled={page === totalPages || loading || totalPages === 0}
@@ -439,6 +494,46 @@ export default function MovimentacoesPage() {
           </div>
         </button>
       </div>
+
+      {/* 💀 MODAL "GOD MODE" (EXCLUSÃO) */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 border-2 border-red-100 scale-100 animate-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-600 animate-pulse">
+                <Ghost size={32} />
+              </div>
+
+              <div>
+                <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">
+                  Exclusão Fantasma
+                </h3>
+                <p className="text-sm text-gray-500 mt-2 font-medium">
+                  Você está prestes a apagar uma movimentação de estoque. Essa
+                  ação é{" "}
+                  <span className="text-red-600 font-bold">irreversível</span> e
+                  não deixará rastros.
+                </p>
+              </div>
+
+              <div className="flex gap-3 w-full mt-2">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors text-sm"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm"
+                >
+                  <Trash2 size={16} /> APAGAR
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
