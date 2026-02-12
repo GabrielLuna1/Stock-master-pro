@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IProduct extends Document {
   name: string;
   sku: string;
+  ean?: string;
   category: string;
   quantity: number;
   minStock: number;
@@ -31,6 +32,11 @@ const ProductSchema: Schema = new Schema(
       unique: true,
       uppercase: true,
       default: () => `MASTER-${Math.floor(1000 + Math.random() * 9000)}`,
+    },
+    ean: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
     category: { type: String, default: "Geral" },
     quantity: { type: Number, required: true, min: 0, default: 0 },
