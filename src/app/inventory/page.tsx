@@ -10,8 +10,6 @@ import {
   Layers,
   CheckCircle2,
   AlertTriangle,
-  Calendar,
-  X,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -19,7 +17,8 @@ import {
   History,
   CheckSquare,
   Square,
-  Edit3,
+  X,
+  Truck,
 } from "lucide-react";
 
 // Componentes
@@ -28,7 +27,6 @@ import DeleteConfirmModal from "../../components/inventory/DeleteConfirmModal";
 import AddProductModal from "../../components/inventory/AddProductModal";
 import HistoryModal from "../../components/inventory/HistoryModal";
 import BatchDeleteModal from "../../components/inventory/BatchDeleteModal";
-// 👇 IMPORT NOVO
 import { DataDisplay } from "@/components/ui/DataDisplay";
 
 // Libs
@@ -44,6 +42,7 @@ export default function InventoryPage() {
   // Estados de Dados
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]); // ✨ NOVO: Estado de Fornecedores
   const [loading, setLoading] = useState(true);
 
   // Estados de Filtro
@@ -53,8 +52,6 @@ export default function InventoryPage() {
   const [filterStatus, setFilterStatus] = useState<
     "ALL" | "STABLE" | "CRITICAL"
   >("ALL");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
 
   // Estado de Seleção em Massa
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -77,18 +74,24 @@ export default function InventoryPage() {
   const [historyMovements, setHistoryMovements] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // 1. Carregar Dados Iniciais
+  // 1. Carregar Dados Iniciais (Agora busca Fornecedores também)
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [prodRes, catRes] = await Promise.all([
+      const [prodRes, catRes, supRes] = await Promise.all([
         fetch("/api/products", { cache: "no-store" }),
         fetch("/api/categories", { cache: "no-store" }),
+        fetch("/api/suppliers", { cache: "no-store" }), // ✨ NOVO: Busca fornecedores
       ]);
+
       const prods = await prodRes.json();
       const cats = await catRes.json();
+      const sups = await supRes.json();
+
       setProducts(Array.isArray(prods) ? prods : []);
       setCategories(Array.isArray(cats) ? cats : []);
+      setSuppliers(Array.isArray(sups) ? sups : []); // ✨ NOVO
+
       setSelectedIds([]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -105,7 +108,7 @@ export default function InventoryPage() {
   // Resetar página ao filtrar
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory, filterStatus, startDate, endDate]);
+  }, [searchTerm, selectedCategory, filterStatus]);
 
   const getCategoryColor = (categoryName: string) => {
     if (!categoryName) return "#94a3b8";
@@ -124,35 +127,25 @@ export default function InventoryPage() {
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // 2. Filtro de Categoria (AGORA MAIS ROBUSTO)
-    // Comparamos transformando tudo para minúsculo e sem espaços nas pontas
+    // 2. Filtro de Categoria
     const productCat = p.category
       ? p.category.toString().trim().toLowerCase()
       : "";
     const selectedCat = selectedCategory.toString().trim().toLowerCase();
-
     const matchesCategory =
       selectedCategory === "TODAS" || productCat === selectedCat;
 
     // 3. Filtro de Status
+    // Usa a lógica híbrida (minStock antigo ou minQuantity novo)
+    const minQty = Number(p.minStock || p.minQuantity || 15);
     let matchesStatus = true;
+
     if (filterStatus === "CRITICAL")
-      matchesStatus = Number(p.quantity) <= Number(p.minStock || 15);
+      matchesStatus = Number(p.quantity) <= minQty;
     else if (filterStatus === "STABLE")
-      matchesStatus = Number(p.quantity) > Number(p.minStock || 15);
+      matchesStatus = Number(p.quantity) > minQty;
 
-    // 4. Filtro de Data
-    let matchesDate = true;
-    if (startDate || endDate) {
-      const productDate = new Date(p.createdAt);
-      const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
-      const end = endDate ? new Date(`${endDate}T23:59:59.999`) : null;
-
-      if (start && productDate < start) matchesDate = false;
-      if (end && productDate > end) matchesDate = false;
-    }
-
-    return matchesSearch && matchesCategory && matchesStatus && matchesDate;
+    return matchesSearch && matchesCategory && matchesStatus;
   });
 
   // Paginação
@@ -164,14 +157,6 @@ export default function InventoryPage() {
   );
 
   // --- AÇÕES DE MASSA ---
-  const handleSelectAll = () => {
-    if (selectedIds.length === currentProducts.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(currentProducts.map((p) => p._id));
-    }
-  };
-
   const handleSelectOne = (id: string) => {
     if (selectedIds.includes(id)) {
       setSelectedIds(selectedIds.filter((item) => item !== id));
@@ -190,7 +175,7 @@ export default function InventoryPage() {
       });
 
       if (res.ok) {
-        toast.success(`${selectedIds.length} produtos excluídos com sucesso!`);
+        toast.success(`${selectedIds.length} produtos excluídos!`);
         await refreshDashboard();
         fetchData();
         setIsBatchModalOpen(false);
@@ -199,8 +184,7 @@ export default function InventoryPage() {
         toast.error("Erro ao excluir itens.");
       }
     } catch (error) {
-      console.error(error);
-      toast.error("Erro de comunicação com o servidor.");
+      toast.error("Erro de comunicação.");
     } finally {
       setIsBatchDeleting(false);
     }
@@ -260,64 +244,45 @@ export default function InventoryPage() {
     }
   };
 
-  // 💎 FUNÇÃO DE EXPORTAÇÃO PREMIUM (Corrigida)
+  // 💎 EXPORTAÇÃO PREMIUM
   const exportToPDF = () => {
     const doc = new jsPDF();
-
-    // ✅ FIX 1: Tipagem explícita [r, g, b] para o TypeScript não reclamar no autoTable
     const brandRed: [number, number, number] = [220, 38, 38];
     const brandDark: [number, number, number] = [17, 24, 39];
     const brandGray: [number, number, number] = [107, 114, 128];
 
-    // --- 1. CABEÇALHO ---
-    doc.setFillColor(brandRed[0], brandRed[1], brandRed[2]);
+    // Cabeçalho
+    doc.setFillColor(...brandRed);
     doc.roundedRect(14, 15, 12, 12, 2, 2, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
     doc.text("S", 17.5, 22.5);
 
-    doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
+    doc.setTextColor(...brandDark);
     doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
     doc.text("STOCK", 30, 23);
-    doc.setTextColor(brandRed[0], brandRed[1], brandRed[2]);
+    doc.setTextColor(...brandRed);
     doc.text("MASTER", 51, 23);
 
-    doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    const reportTitle = "RELATÓRIO DE INVENTÁRIO FÍSICO";
     const pageWidth = doc.internal.pageSize.width;
-    doc.text(reportTitle, pageWidth - 14, 20, { align: "right" });
+    doc.setFontSize(10);
+    doc.setTextColor(...brandDark);
+    doc.setFont("helvetica", "normal");
+    doc.text("RELATÓRIO DE INVENTÁRIO FÍSICO", pageWidth - 14, 20, {
+      align: "right",
+    });
 
     doc.setFontSize(8);
-    doc.setTextColor(brandGray[0], brandGray[1], brandGray[2]);
-    const dateStr = `Gerado em: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}`;
-    const userStr = `Por: ${session?.user?.name || "Sistema"}`;
-    doc.text(dateStr, pageWidth - 14, 25, { align: "right" });
-    doc.text(userStr, pageWidth - 14, 29, { align: "right" });
-
-    doc.setDrawColor(229, 231, 235);
-    doc.line(14, 35, pageWidth - 14, 35);
-
-    // --- 2. RESUMO ---
-    doc.setFontSize(9);
-    doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Total de Itens: ${filteredProducts.length}`, 14, 42);
-
-    const totalValue = filteredProducts.reduce(
-      (acc, p) => acc + Number(p.price || 0) * Number(p.quantity || 0),
-      0,
+    doc.setTextColor(...brandGray);
+    doc.text(
+      `Gerado em: ${new Date().toLocaleDateString()}`,
+      pageWidth - 14,
+      25,
+      { align: "right" },
     );
-    const totalValueStr = new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(totalValue);
-    doc.text(`Valor Estimado: ${totalValueStr}`, 80, 42);
 
-    // --- 3. TABELA ---
+    // Tabela
     const tableData = filteredProducts.map((p) => [
       p.sku.toUpperCase(),
       p.name,
@@ -331,57 +296,19 @@ export default function InventoryPage() {
     ]);
 
     autoTable(doc, {
-      startY: 48,
+      startY: 35,
       head: [["SKU", "PRODUTO", "CATEGORIA", "PREÇO UN.", "QTD", "STATUS"]],
       body: tableData,
       theme: "grid",
-      styles: {
-        fontSize: 8,
-        cellPadding: 3,
-        font: "helvetica",
-        textColor: [55, 65, 81],
-      },
       headStyles: {
-        fillColor: brandRed, // ✅ Agora funciona com a tipagem [number, number, number]
+        fillColor: brandRed,
         textColor: [255, 255, 255],
         fontStyle: "bold",
-        halign: "left",
       },
+      styles: { fontSize: 8, cellPadding: 3 },
       columnStyles: {
-        0: { fontStyle: "bold", cellWidth: 25 },
-        3: { halign: "right" },
+        0: { fontStyle: "bold" },
         4: { halign: "center", fontStyle: "bold" },
-        5: { halign: "center", cellWidth: 20 },
-      },
-      alternateRowStyles: { fillColor: [249, 250, 251] },
-      didParseCell: function (data) {
-        if (data.section === "body" && data.column.index === 5) {
-          if (data.cell.raw === "BAIXO") {
-            data.cell.styles.textColor = [220, 38, 38];
-            data.cell.styles.fontStyle = "bold";
-          } else {
-            data.cell.styles.textColor = [16, 185, 129];
-            data.cell.styles.fontStyle = "bold";
-          }
-        }
-      },
-      // --- 4. RODAPÉ (Corrigido) ---
-      didDrawPage: function (data) {
-        // ✅ FIX 2: Cast (doc as any) resolve o erro do método getNumberOfPages
-        const pageCount = (doc as any).internal.getNumberOfPages();
-        const currentPage = (doc as any).internal.getCurrentPageInfo()
-          .pageNumber;
-        const str = `Página ${currentPage} de ${pageCount}`;
-
-        doc.setFontSize(8);
-        doc.setTextColor(156, 163, 175);
-        const pageSize = doc.internal.pageSize;
-        const pageHeight = pageSize.height
-          ? pageSize.height
-          : pageSize.getHeight();
-
-        doc.text(str, data.settings.margin.left, pageHeight - 10);
-        doc.text("StockMaster Pro © 2026", pageWidth - 50, pageHeight - 10);
       },
     });
 
@@ -393,12 +320,30 @@ export default function InventoryPage() {
   ).length;
   const countStable = products.length - countCritical;
 
+  const getSupplierName = (supplierVal: any) => {
+    // Se não tiver valor, retorna traço
+    if (!supplierVal)
+      return <span className="text-gray-300 text-[10px]">-</span>;
+
+    // CASO 1: O backend mandou o objeto completo (ex: { _id: "...", name: "Dell" })
+    if (typeof supplierVal === "object" && supplierVal.name) {
+      return supplierVal.name;
+    }
+
+    // CASO 2: O backend mandou só o ID (string). Procuramos na lista 'suppliers' que carregamos.
+    if (Array.isArray(suppliers)) {
+      const found = suppliers.find((s) => s._id === supplierVal);
+      if (found) return found.name;
+    }
+
+    return <span className="text-gray-300 text-[10px]">N/A</span>;
+  };
+
   // 👇 CONFIGURAÇÃO DAS COLUNAS PARA O DataDisplay
   const columns = [
     {
       header: "Select",
       accessorKey: "_id" as keyof any,
-      // Renderiza o Checkbox na tabela Desktop
       cell: (item: any) => {
         const isSelected = selectedIds.includes(item._id);
         return (
@@ -428,7 +373,13 @@ export default function InventoryPage() {
       header: "Produto",
       accessorKey: "name" as keyof any,
       cell: (item: any) => (
-        <span className="font-bold text-gray-900">{item.name}</span>
+        <div className="flex flex-col">
+          <span className="font-bold text-gray-900 text-sm">{item.name}</span>
+          <div className="flex items-center gap-1 text-[10px] text-gray-400 font-medium mt-0.5">
+            <Truck size={10} />
+            {getSupplierName(item.supplier)}
+          </div>
+        </div>
       ),
     },
     {
@@ -446,6 +397,32 @@ export default function InventoryPage() {
         </div>
       ),
     },
+    // 💰 COLUNA DE CUSTO (NOVA)
+    {
+      header: "Custo",
+      accessorKey: "costPrice" as keyof any,
+      cell: (item: any) => (
+        <div className="text-xs font-medium text-gray-400">
+          {new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(item.costPrice || 0)}
+        </div>
+      ),
+    },
+    // 💰 COLUNA DE VENDA (ATUALIZADA)
+    {
+      header: "Venda",
+      accessorKey: "price" as keyof any,
+      cell: (item: any) => (
+        <div className="font-bold text-sm text-emerald-700">
+          {new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(item.price || 0)}
+        </div>
+      ),
+    },
     {
       header: "Qtd",
       accessorKey: "quantity" as keyof any,
@@ -453,9 +430,13 @@ export default function InventoryPage() {
         const isLow = Number(item.quantity) <= Number(item.minStock || 15);
         return (
           <div className="flex flex-col">
-            <span className="font-black text-gray-800">{item.quantity} un</span>
+            <span
+              className={`font-black text-sm ${isLow ? "text-red-600" : "text-gray-800"}`}
+            >
+              {item.quantity} un
+            </span>
             {isLow && (
-              <span className="text-[9px] font-bold text-red-500 flex items-center gap-1">
+              <span className="text-[9px] font-bold text-red-500 flex items-center gap-1 bg-red-50 px-1.5 py-0.5 rounded w-fit mt-1">
                 <AlertTriangle size={8} /> REPOSIÇÃO
               </span>
             )}
@@ -463,14 +444,14 @@ export default function InventoryPage() {
         );
       },
     },
-    // Coluna extra só para ações extras (Histórico)
     {
       header: "Histórico",
       accessorKey: "_id" as keyof any,
       cell: (item: any) => (
         <button
           onClick={() => handleHistory(item)}
-          className="p-1.5 hover:bg-purple-50 text-gray-400 hover:text-purple-600 rounded-full transition-all"
+          className="p-2 hover:bg-purple-50 text-gray-400 hover:text-purple-600 rounded-xl transition-all"
+          title="Ver Movimentações"
         >
           <History size={18} />
         </button>
@@ -492,22 +473,21 @@ export default function InventoryPage() {
             </h1>
           </div>
           <p className="text-sm text-gray-500 font-medium ml-12">
-            Exibindo {filteredProducts.length} registros encontrados.
+            Exibindo {filteredProducts.length} registros.
           </p>
         </div>
 
         <div className="flex gap-3 w-full md:w-auto">
           <button
             onClick={exportToPDF}
-            className="flex-1 md:flex-none justify-center bg-white border border-gray-200 text-gray-700 px-4 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 hover:text-red-600 transition-all shadow-sm active:scale-95 text-xs"
+            className="flex-1 md:flex-none justify-center bg-white border border-gray-200 text-gray-700 px-4 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 hover:text-red-600 transition-all text-xs"
           >
             <FileText size={18} />{" "}
             <span className="hidden md:inline">EXPORTAR PDF</span>
           </button>
-
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex-1 md:flex-none justify-center bg-red-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-700 transition-all shadow-lg shadow-red-200 active:scale-95 text-xs"
+            className="flex-1 md:flex-none justify-center bg-red-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-700 transition-all shadow-lg shadow-red-200 text-xs"
           >
             <Plus size={20} />{" "}
             <span className="hidden md:inline">ADICIONAR ITEM</span>
@@ -517,7 +497,6 @@ export default function InventoryPage() {
 
       {/* ÁREA DE FILTROS */}
       <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm mb-8 space-y-4">
-        {/* Busca e Categoria */}
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
             <Search
@@ -584,38 +563,35 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        {/* Status e Datas */}
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between border-t border-gray-100 pt-4">
-          <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            <button
-              onClick={() => setFilterStatus("ALL")}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 border ${filterStatus === "ALL" ? "bg-gray-900 text-white border-gray-900 shadow-md" : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"}`}
-            >
-              <Layers size={14} /> Todos
-            </button>
-            <button
-              onClick={() => setFilterStatus("STABLE")}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 border ${filterStatus === "STABLE" ? "bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm" : "bg-white text-gray-400 border-gray-200 hover:text-emerald-500 hover:border-emerald-100"}`}
-            >
-              <CheckCircle2 size={14} /> Estáveis{" "}
-              <span className="bg-emerald-200 text-emerald-800 px-1.5 rounded text-[9px]">
-                {countStable}
-              </span>
-            </button>
-            <button
-              onClick={() => setFilterStatus("CRITICAL")}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 border ${filterStatus === "CRITICAL" ? "bg-red-50 text-red-600 border-red-200 shadow-sm" : "bg-white text-gray-400 border-gray-200 hover:text-red-500 hover:border-red-100"}`}
-            >
-              <AlertTriangle size={14} /> Reposição{" "}
-              <span className="bg-red-200 text-red-800 px-1.5 rounded text-[9px]">
-                {countCritical}
-              </span>
-            </button>
-          </div>
+        <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100">
+          <button
+            onClick={() => setFilterStatus("ALL")}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 border ${filterStatus === "ALL" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-400 border-gray-200"}`}
+          >
+            <Layers size={14} /> Todos
+          </button>
+          <button
+            onClick={() => setFilterStatus("STABLE")}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 border ${filterStatus === "STABLE" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-white text-gray-400 border-gray-200"}`}
+          >
+            <CheckCircle2 size={14} /> Estáveis{" "}
+            <span className="bg-emerald-200 text-emerald-800 px-1.5 rounded text-[9px]">
+              {countStable}
+            </span>
+          </button>
+          <button
+            onClick={() => setFilterStatus("CRITICAL")}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 border ${filterStatus === "CRITICAL" ? "bg-red-50 text-red-600 border-red-200" : "bg-white text-gray-400 border-gray-200"}`}
+          >
+            <AlertTriangle size={14} /> Reposição{" "}
+            <span className="bg-red-200 text-red-800 px-1.5 rounded text-[9px]">
+              {countCritical}
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* ⚡ TABELA RESPONSIVA (Aqui entra o DataDisplay) */}
+      {/* TABELA */}
       <div className="flex-1">
         {loading ? (
           <div className="flex justify-center py-20">
@@ -637,7 +613,7 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {/* --- BARRA FLUTUANTE (SELEÇÃO) --- */}
+      {/* BARRA FLUTUANTE DE SELEÇÃO */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-5 z-50 border border-gray-800 w-[90%] md:w-auto justify-between md:justify-start">
           <div className="flex items-center gap-3 pl-2">
@@ -653,8 +629,7 @@ export default function InventoryPage() {
               onClick={() => setIsBatchModalOpen(true)}
               className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95"
             >
-              <Trash2 size={16} />
-              Excluir
+              <Trash2 size={16} /> Excluir
             </button>
             <button
               onClick={() => setSelectedIds([])}
@@ -670,35 +645,20 @@ export default function InventoryPage() {
       <div className="flex items-center justify-between mt-8">
         <button
           onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-          disabled={currentPage === 1 || loading}
-          className="group flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-2xl shadow-sm text-sm font-bold text-gray-600 hover:border-red-500 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          disabled={currentPage === 1}
+          className="flex items-center gap-2 px-4 py-2 bg-white border rounded-xl font-bold text-gray-600 disabled:opacity-50 text-sm"
         >
-          <div className="bg-gray-50 p-1.5 rounded-lg group-hover:bg-red-50 transition-colors">
-            <ChevronLeft size={18} />
-          </div>{" "}
-          <span className="hidden md:inline">Anterior</span>
+          <ChevronLeft size={16} /> Anterior
         </button>
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-            Página
-          </span>
-          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
-            <span className="font-black text-red-600 text-lg">
-              {currentPage}
-            </span>
-            <span className="text-gray-300 font-light">/</span>
-            <span className="font-bold text-gray-500">{totalPages || 1}</span>
-          </div>
-        </div>
+        <span className="font-bold text-gray-500 text-sm">
+          Página {currentPage} de {totalPages || 1}
+        </span>
         <button
           onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-          disabled={currentPage === totalPages || loading || totalPages === 0}
-          className="group flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-2xl shadow-sm text-sm font-bold text-gray-600 hover:border-red-500 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          disabled={currentPage === totalPages || totalPages === 0}
+          className="flex items-center gap-2 px-4 py-2 bg-white border rounded-xl font-bold text-gray-600 disabled:opacity-50 text-sm"
         >
-          <span className="hidden md:inline">Próxima</span>
-          <div className="bg-gray-50 p-1.5 rounded-lg group-hover:bg-red-50 transition-colors">
-            <ChevronRight size={18} />
-          </div>
+          Próxima <ChevronRight size={16} />
         </button>
       </div>
 
@@ -707,6 +667,8 @@ export default function InventoryPage() {
         <AddProductModal
           onClose={() => setIsAddModalOpen(false)}
           onRefresh={fetchData}
+          categories={categories}
+          suppliers={suppliers}
         />
       )}
       {isEditModalOpen && selectedProduct && (
@@ -714,6 +676,8 @@ export default function InventoryPage() {
           product={selectedProduct}
           onClose={() => setIsEditModalOpen(false)}
           onRefresh={fetchData}
+          categories={categories}
+          suppliers={suppliers}
         />
       )}
       {isDeleteModalOpen && (

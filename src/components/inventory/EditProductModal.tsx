@@ -1,203 +1,269 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, ChevronDown, Info } from "lucide-react";
+import { X, Loader2, Package, Layers, Truck, DollarSign } from "lucide-react";
+import { toast } from "sonner";
+
+interface EditProductModalProps {
+  product: any;
+  onClose: () => void;
+  onRefresh: () => void;
+  categories: any[]; // ✨ Agora aceita categorias
+  suppliers: any[]; // ✨ Agora aceita fornecedores
+}
 
 export default function EditProductModal({
   product,
   onClose,
   onRefresh,
-}: {
-  product: any;
-  onClose: () => void;
-  onRefresh: () => void;
-}) {
+  categories,
+  suppliers,
+}: EditProductModalProps) {
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<any[]>([]);
+
+  // Estado do formulário
   const [formData, setFormData] = useState({
-    name: product.name,
-    sku: product.sku,
-    quantity: product.quantity,
-    category: product.category,
-    minStock: product.minStock || 15,
-    location: product.location || "", // Adicionei caso queira salvar localização
-    price: product.price || 0, // Adicionei caso queira salvar preço
-    status: product.status || "ESTÁVEL",
+    name: "",
+    category: "",
+    supplier: "",
+    minStock: "",
+    price: "",
+    costPrice: "",
+    location: "",
   });
 
-  // Busca categorias
+  // Preenche os dados quando o produto muda (ao abrir o modal)
   useEffect(() => {
-    fetch("/api/categories")
-      .then((res) => res.json())
-      .then((data) => {
-        setCategories(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => console.error("Erro ao carregar categorias:", err));
-  }, []);
+    if (product) {
+      setFormData({
+        name: product.name || "",
+        category: product.category || "",
+        // Lógica inteligente: Se o supplier vier populado (objeto), pega o _id. Se vier só ID (string), usa direto.
+        supplier:
+          typeof product.supplier === "object" && product.supplier !== null
+            ? product.supplier._id
+            : product.supplier || "",
+
+        // Pega minStock (antigo) ou minQuantity (novo)
+        minStock: String(product.minStock || product.minQuantity || "15"),
+
+        price: String(product.price || "0"),
+        costPrice: String(product.costPrice || "0"),
+        location: product.location || "",
+      });
+    }
+  }, [product]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // 🛡️ A CORREÇÃO: Pegamos o ID de forma segura
-    const id = product._id || product.id;
-
-    if (!id) {
-      alert("Erro: Produto sem ID.");
-      setLoading(false);
-      return;
-    }
-
     try {
-      // 🛣️ A ROTA EXPRESSA: Usamos 'manage-product' para evitar o erro 404 da pasta
-      const res = await fetch(`/api/manage-product?id=${id}`, {
+      const res = await fetch("/api/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          _id: product._id, // Importante enviar o ID para saber quem atualizar
+          ...formData,
+          minStock: Number(formData.minStock),
+          price: Number(formData.price),
+          costPrice: Number(formData.costPrice),
+        }),
       });
 
-      if (res.ok) {
-        onRefresh();
-        onClose();
-      } else {
-        const err = await res.json();
-        alert("Erro ao salvar: " + err.error);
-      }
-    } catch (err) {
-      console.error("Erro na atualização:", err);
-      alert("Erro de conexão.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao atualizar");
+
+      toast.success("Produto atualizado com sucesso!");
+      onRefresh();
+      onClose();
+    } catch (error: any) {
+      toast.error(error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-        <div className="p-10">
-          <header className="flex justify-between items-start mb-8">
-            <div>
-              <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
-                Editar Item <span className="text-brand-red">Master</span>
-              </h2>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-1 flex items-center gap-1">
-                <Info size={10} /> SKU: {product.sku}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X size={20} className="text-gray-400" />
-            </button>
-          </header>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        {/* HEADER */}
+        <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-start bg-gray-50/50">
+          <div>
+            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
+              EDITAR ITEM <span className="text-red-600">MASTER</span>
+            </h2>
+            <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-wider">
+              SKU: {product.sku}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-red-500 transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* 1. NOME */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest ml-1">
-                Descrição do Produto
-              </label>
-              <input
-                className="w-full p-4 bg-gray-50/50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-brand-red/5 focus:border-brand-red outline-none font-bold transition-all text-gray-900"
-                placeholder="Ex: Caixa Master de Papelão"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                required
-              />
-            </div>
+        {/* FORMULÁRIO COM SCROLL */}
+        <div className="p-8 overflow-y-auto custom-scrollbar">
+          <form
+            id="edit-product-form"
+            onSubmit={handleSubmit}
+            className="space-y-6"
+          >
+            {/* 1. DADOS GERAIS */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4 flex items-center gap-2">
+                <Package size={14} /> Dados Gerais
+              </h3>
 
-            {/* 2. CATEGORIA */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest ml-1">
-                Categoria
-              </label>
-              <div className="relative">
-                <select
-                  className="w-full p-4 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-brand-red outline-none font-bold appearance-none cursor-pointer text-gray-900 uppercase truncate pr-10"
-                  value={formData.category}
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  Nome do Produto
+                </label>
+                <input
+                  required
+                  type="text"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-sm"
+                  value={formData.name}
                   onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
+                    setFormData({ ...formData, name: e.target.value })
                   }
-                >
-                  <option value="">Selecione...</option>
-                  {categories.length === 0 ? (
-                    <option disabled>Carregando...</option>
-                  ) : (
-                    categories.map((cat) => (
-                      <option key={cat._id} value={cat.name}>
-                        {cat.name.toUpperCase()}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <ChevronDown
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                  size={18}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
+                    <Layers size={10} /> Categoria
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 text-sm font-medium text-gray-700 appearance-none"
+                    value={formData.category}
+                    onChange={(e) =>
+                      setFormData({ ...formData, category: e.target.value })
+                    }
+                  >
+                    <option value="">Selecione...</option>
+                    {/* Mapeia as categorias recebidas via PROPS */}
+                    {categories.map((cat) => (
+                      <option key={cat._id} value={cat.name}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
+                    <Truck size={10} /> Fornecedor
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 text-sm font-medium text-gray-700 appearance-none"
+                    value={formData.supplier}
+                    onChange={(e) =>
+                      setFormData({ ...formData, supplier: e.target.value })
+                    }
+                  >
+                    <option value="">Sem vínculo (Próprio)</option>
+                    {/* Mapeia os fornecedores recebidos via PROPS */}
+                    {suppliers.map((sup) => (
+                      <option key={sup._id} value={sup._id}>
+                        {sup.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            {/* 3. GRID TRIPLO (SKU, QTD, MIN) */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2 col-span-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                  SKU
-                </label>
-                <div className="p-4 bg-gray-100 border border-gray-100 rounded-2xl font-mono text-xs text-gray-500 flex items-center justify-center italic">
-                  {formData.sku}
+            {/* 2. FINANCEIRO & CONFIG */}
+            <div className="space-y-4 pt-2">
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4 flex items-center gap-2">
+                <DollarSign size={14} /> Ajustes & Valores
+              </h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                    Custo (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-900 text-sm"
+                    value={formData.costPrice}
+                    onChange={(e) =>
+                      setFormData({ ...formData, costPrice: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                    Venda (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-900 text-sm"
+                    value={formData.price}
+                    onChange={(e) =>
+                      setFormData({ ...formData, price: e.target.value })
+                    }
+                  />
                 </div>
               </div>
 
-              <div className="space-y-2 col-span-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                  Estoque
-                </label>
-                <input
-                  type="number"
-                  className="w-full p-4 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-brand-red outline-none font-bold text-center text-gray-900"
-                  value={formData.quantity}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      quantity: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2 col-span-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                  Mínimo
-                </label>
-                <input
-                  type="number"
-                  className="w-full p-4 bg-gray-50/50 border border-gray-100 rounded-2xl focus:border-brand-red outline-none font-bold text-center text-brand-red"
-                  value={formData.minStock}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      minStock: Number(e.target.value),
-                    })
-                  }
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                    Estoque Mínimo
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-center"
+                    value={formData.minStock}
+                    onChange={(e) =>
+                      setFormData({ ...formData, minStock: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                    Localização
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Corredor A"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-700 text-center"
+                    value={formData.location}
+                    onChange={(e) =>
+                      setFormData({ ...formData, location: e.target.value })
+                    }
+                  />
+                </div>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-brand-red text-white font-black py-5 rounded-2xl hover:bg-brand-dark-red transition-all shadow-xl shadow-red-100 mt-4 flex justify-center items-center gap-2 active:scale-[0.98]"
-            >
-              {loading ? (
-                <Loader2 className="animate-spin" size={24} />
-              ) : (
-                "SALVAR ALTERAÇÕES"
-              )}
-            </button>
           </form>
+        </div>
+
+        {/* FOOTER */}
+        <div className="p-6 border-t border-gray-100 bg-gray-50/50">
+          <button
+            type="submit"
+            form="edit-product-form"
+            disabled={loading}
+            className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition-all active:scale-95 uppercase tracking-wide text-sm flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              "Salvar Alterações"
+            )}
+          </button>
         </div>
       </div>
     </div>

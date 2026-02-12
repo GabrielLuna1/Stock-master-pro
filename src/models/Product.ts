@@ -6,12 +6,18 @@ export interface IProduct extends Document {
   category: string;
   quantity: number;
   minStock: number;
-  price: number;
+
+  // 💰 Financeiro
+  price: number; // Preço de VENDA (O que entra no caixa)
+  costPrice: number; // ✨ NOVO: Preço de CUSTO (O que sai do caixa)
+
   location: string;
+
+  // 🔗 Relacionamentos
+  supplier?: mongoose.Types.ObjectId; // ✨ NOVO: Fornecedor vinculado
+
   createdAt: Date;
   updatedAt: Date;
-
-  // ✨ NOVOS CAMPOS (Opcionais pois produtos antigos não têm)
   createdBy?: mongoose.Types.ObjectId;
   lastModifiedBy?: mongoose.Types.ObjectId;
 }
@@ -29,14 +35,21 @@ const ProductSchema: Schema = new Schema(
     category: { type: String, default: "Geral" },
     quantity: { type: Number, required: true, min: 0, default: 0 },
     minStock: { type: Number, default: 15 },
-    price: { type: Number, min: 0, default: 0 },
+
+    // 💰 FINANCEIRO
+    price: { type: Number, min: 0, default: 0 }, // Venda (Mantivemos o nome 'price' para não quebrar o front)
+    costPrice: { type: Number, min: 0, default: 0 }, // Custo (Para cálculo de lucro)
+
     location: { type: String, uppercase: true, default: "ALMOXARIFADO" },
 
-    // ✨ AQUI ESTÁ A MÁGICA:
+    // 🔗 FORNECEDOR (Ponte para a Fase 2)
+    supplier: { type: Schema.Types.ObjectId, ref: "Supplier" }, // Vai apontar para o model que criaremos a seguir
+
+    // 🛡️ AUDITORIA
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     lastModifiedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Product =

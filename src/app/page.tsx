@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { OverviewChart } from "../components/dashboard/OverviewChart";
-import AutoUpdate from "@/components/layout/AutoUpdate";
 import {
   Package,
   AlertTriangle,
@@ -13,8 +12,12 @@ import {
   ShieldCheck,
   Search,
   History,
-  CalendarDays,
   FileSpreadsheet,
+  ChevronDown,
+  Calendar,
+  DollarSign, // ✨ Ícone Financeiro
+  Wallet, // ✨ Ícone Financeiro
+  PiggyBank, // ✨ Ícone Financeiro
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -23,86 +26,89 @@ import { toast } from "sonner";
 import ExcelJS from "exceljs";
 import FileSaver from "file-saver";
 
+// 💰 Função auxiliar para formatar Dinheiro (R$)
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+};
+
 export default function Dashboard() {
   const { data: session } = useSession();
 
-  const [stats, setStats] = useState({
-    totalProducts: 0,
-    lowStock: 0,
-    totalEntries: 0,
-    totalExits: 0,
-    chartData: [],
-    loading: true,
+  // 1. CONFIGURAÇÃO DE DATAS 📅
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const startYear = 2024;
+
+  const years = Array.from(
+    { length: currentYear - startYear + 2 },
+    (_, i) => startYear + i,
+  ).sort((a, b) => b - a);
+
+  const todayFormatted = now.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
   });
 
-  const now = new Date();
-  const currentMonthIdx = now.getMonth();
-  const currentYear = now.getFullYear();
+  const capitalisedDate = todayFormatted.replace(
+    /(^\w{1})|(\s+\w{1})/g,
+    (letter) => letter.toUpperCase(),
+  );
 
-  const currentMonthName = now.toLocaleDateString("pt-BR", { month: "long" });
-  const formattedMonthName =
-    currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
+  // 2. ESTADOS
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
+  // ✨ NOVO: Estado do Toggle (Visão Estoque vs Financeiro)
+  const [viewMode, setViewMode] = useState<"stock" | "financial">("stock");
+
+  const months = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+
+  // 4. BUSCA DADOS NA API
   useEffect(() => {
     async function fetchDashboardData() {
+      setLoading(true);
       try {
-        const [prodRes, chartRes] = await Promise.all([
-          fetch("/api/products"),
-          fetch("/api/dashboard/chart"),
-        ]);
+        const res = await fetch(
+          `/api/dashboard?month=${selectedMonth}&year=${selectedYear}`,
+        );
 
-        const products = await prodRes.json();
-        const chartData = await chartRes.json();
+        if (!res.ok) throw new Error("Falha na API");
 
-        // 1. Totais Produtos
-        let totalProds = 0;
-        let lowStock = 0;
-
-        if (Array.isArray(products)) {
-          totalProds = products.length;
-          lowStock = products.filter(
-            (p: any) => Number(p.quantity) <= Number(p.minStock || 15),
-          ).length;
-        }
-
-        // 2. Totais do Mês
-        let entries = 0;
-        let exits = 0;
-
-        if (Array.isArray(chartData)) {
-          chartData.forEach((day: any) => {
-            const dayDate = new Date(day.fullDate);
-            if (
-              dayDate.getMonth() === currentMonthIdx &&
-              dayDate.getFullYear() === currentYear
-            ) {
-              entries += day.entradas || 0;
-              exits += day.saidas || 0;
-            }
-          });
-        }
-
-        setStats({
-          totalProducts: totalProds,
-          lowStock: lowStock,
-          totalEntries: entries,
-          totalExits: exits,
-          chartData: chartData,
-          loading: false,
-        });
+        const data = await res.json();
+        setDashboardData(data);
       } catch (error) {
         console.error("Erro dashboard:", error);
         toast.error("Erro ao carregar dados.");
-        setStats((prev) => ({ ...prev, loading: false }));
+      } finally {
+        setLoading(false);
       }
     }
 
     fetchDashboardData();
-  }, [currentMonthIdx, currentYear]);
+  }, [selectedMonth, selectedYear]);
 
-  // --- 💎 FUNÇÃO EXCEL "RED BANNER DESIGN" ---
+  // --- 💎 FUNÇÃO EXCEL (Mantida Igual) ---
   const handleDownloadExcel = async () => {
-    if (!stats.chartData.length) {
+    if (!dashboardData?.chartData?.length) {
       toast.error("Sem dados para exportar.");
       return;
     }
@@ -113,20 +119,10 @@ export default function Dashboard() {
         views: [{ showGridLines: false }],
       });
 
-      // 1. FILTRAR DADOS (Mês Atual)
-      const currentMonthData = stats.chartData.filter((item: any) => {
-        const d = new Date(item.fullDate);
-        return (
-          d.getMonth() === currentMonthIdx && d.getFullYear() === currentYear
-        );
-      });
+      const reportData = dashboardData.chartData;
+      const reportMonthName = months[selectedMonth];
 
-      if (currentMonthData.length === 0) {
-        toast.warning("Sem dados neste mês para exportar.");
-        return;
-      }
-
-      // 2. CONFIGURAR COLUNAS
+      // Configuração Colunas
       worksheet.columns = [
         { key: "margin", width: 2 },
         { key: "date", width: 15 },
@@ -136,7 +132,7 @@ export default function Dashboard() {
         { key: "out", width: 20 },
       ];
 
-      // --- 3. CABEÇALHO ---
+      // Cabeçalho Vermelho
       for (let r = 2; r <= 5; r++) {
         for (let c = 2; c <= 6; c++) {
           worksheet.getCell(r, c).fill = {
@@ -147,6 +143,7 @@ export default function Dashboard() {
         }
       }
 
+      // Logo e Títulos
       worksheet.mergeCells("B3:B4");
       const logoCell = worksheet.getCell("B3");
       logoCell.value = "S";
@@ -177,7 +174,7 @@ export default function Dashboard() {
 
       worksheet.mergeCells("D4:F4");
       const subCell = worksheet.getCell("D4");
-      subCell.value = `RELATÓRIO DE ${formattedMonthName.toUpperCase()} ${currentYear}`;
+      subCell.value = `RELATÓRIO DE ${reportMonthName.toUpperCase()} ${selectedYear}`;
       subCell.font = {
         name: "Segoe UI",
         size: 10,
@@ -189,6 +186,7 @@ export default function Dashboard() {
       worksheet.addRow([]);
       worksheet.addRow([]);
 
+      // Tabela
       const headerRow = worksheet.getRow(8);
       headerRow.getCell(2).value = "DATA";
       headerRow.getCell(4).value = "ENTRADAS (UN)";
@@ -212,28 +210,25 @@ export default function Dashboard() {
       let totalIn = 0;
       let totalOut = 0;
 
-      currentMonthData.forEach((item: any) => {
+      reportData.forEach((item: any) => {
+        if (item.entradas === 0 && item.saidas === 0) return;
+
         totalIn += item.entradas;
         totalOut += item.saidas;
+        const dateStr = `${String(item.day).padStart(2, "0")}/${String(selectedMonth + 1).padStart(2, "0")}/${selectedYear}`;
 
         const row = worksheet.addRow([
           "",
-          item.name,
+          dateStr,
           "",
           item.entradas === 0 ? "-" : item.entradas,
           "",
           item.saidas === 0 ? "-" : item.saidas,
         ]);
-
         row.height = 22;
 
         [2, 4, 6].forEach((col) => {
           const cell = row.getCell(col);
-          cell.font = {
-            name: "Segoe UI",
-            size: 10,
-            color: { argb: "FF374151" },
-          };
           cell.alignment = { horizontal: "center", vertical: "middle" };
           cell.border = {
             bottom: { style: "dotted", color: { argb: "FFD1D5DB" } },
@@ -242,7 +237,6 @@ export default function Dashboard() {
       });
 
       worksheet.addRow([]);
-
       const totalRow = worksheet.addRow([
         "",
         "TOTAL GERAL",
@@ -253,73 +247,45 @@ export default function Dashboard() {
       ]);
       totalRow.height = 30;
 
-      const labelCell = totalRow.getCell(2);
-      labelCell.font = { name: "Segoe UI", bold: true, size: 10 };
-      labelCell.alignment = { horizontal: "left", vertical: "middle" };
-
-      const inCell = totalRow.getCell(4);
-      inCell.fill = {
+      totalRow.getCell(4).fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FF10B981" },
       };
-      inCell.font = {
-        name: "Segoe UI",
-        bold: true,
-        color: { argb: "FFFFFFFF" },
+      totalRow.getCell(4).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      totalRow.getCell(4).alignment = {
+        horizontal: "center",
+        vertical: "middle",
       };
-      inCell.alignment = { horizontal: "center", vertical: "middle" };
 
-      const outCell = totalRow.getCell(6);
-      outCell.fill = {
+      totalRow.getCell(6).fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFDC2626" },
       };
-      outCell.font = {
-        name: "Segoe UI",
-        bold: true,
-        color: { argb: "FFFFFFFF" },
-      };
-      outCell.alignment = { horizontal: "center", vertical: "middle" };
-
-      worksheet.addRow([]);
-      const footerRow = worksheet.addRow([
-        "",
-        `Gerado em ${new Date().toLocaleDateString()} por ${session?.user?.name || "Sistema"}.`,
-      ]);
-      footerRow.getCell(2).font = {
-        size: 8,
-        italic: true,
-        color: { argb: "FF9CA3AF" },
+      totalRow.getCell(6).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      totalRow.getCell(6).alignment = {
+        horizontal: "center",
+        vertical: "middle",
       };
 
       const buffer = await workbook.xlsx.writeBuffer();
-      const fileName = `Relatorio_${formattedMonthName}_${currentYear}.xlsx`;
-
+      const fileName = `Relatorio_${reportMonthName}_${selectedYear}.xlsx`;
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
       FileSaver.saveAs(blob, fileName);
-
-      toast.success("Relatório baixado com sucesso!");
+      toast.success("Relatório baixado!");
     } catch (error) {
       console.error(error);
       toast.error("Erro ao gerar Excel.");
     }
   };
 
-  const todayStr = now.toLocaleDateString("pt-BR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-
-  // 👇 AJUSTE DE PADDING MOBILE: p-4 no celular, p-12 no PC
   return (
     <div className="p-4 md:p-12 min-h-screen bg-gray-50/50 pb-24">
-      {/* HEADER */}
-      <div className="mb-6 md:mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+      {/* HEADER E FILTROS */}
+      <div className="mb-6 md:mb-10 flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
             Olá,{" "}
@@ -328,141 +294,303 @@ export default function Dashboard() {
             </span>
           </h1>
           <p className="text-sm md:text-base text-gray-500 font-medium mt-1">
-            Visão geral estratégica de{" "}
+            Visão{" "}
+            {viewMode === "stock"
+              ? "operacional de estoque"
+              : "financeira estratégica"}{" "}
+            de{" "}
             <span className="capitalize font-bold text-gray-700">
-              {formattedMonthName}
+              {months[selectedMonth]}
             </span>
             .
           </p>
         </div>
 
-        {/* BOTOES DE AÇÃO - Full width no mobile */}
-        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+        {/* 🕹️ ÁREA DE CONTROLE */}
+        <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto items-stretch">
+          {/* ✨ NOVO: TOGGLE SWITCH (ESTOQUE vs FINANCEIRO) */}
+          <div className="bg-gray-200 p-1 rounded-2xl flex relative h-full">
+            <button
+              onClick={() => setViewMode("stock")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase transition-all z-10 flex-1 justify-center ${
+                viewMode === "stock"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Package size={16} /> Estoque
+            </button>
+            <button
+              onClick={() => setViewMode("financial")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase transition-all z-10 flex-1 justify-center ${
+                viewMode === "financial"
+                  ? "bg-emerald-500 text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <DollarSign size={16} /> Financeiro
+            </button>
+          </div>
+
+          {/* 📅 DATA DE HOJE */}
+          <div className="bg-white px-5 py-2.5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3 min-w-fit justify-center md:justify-start">
+            <div className="bg-red-50 p-1.5 rounded-lg text-red-600">
+              <Calendar size={18} />
+            </div>
+            <span className="text-xs font-bold text-gray-800 tracking-wide">
+              {capitalisedDate}
+            </span>
+          </div>
+
+          {/* SELETORES DE DATA */}
+          <div className="flex gap-2 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="relative flex-1 md:flex-none">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full md:w-auto appearance-none bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold py-2.5 pl-4 pr-8 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-100 transition-all text-xs uppercase tracking-wide h-full"
+              >
+                {months.map((m, index) => (
+                  <option key={index} value={index}>
+                    {m.substring(0, 3)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+            </div>
+            <div className="relative flex-1 md:flex-none">
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full md:w-auto appearance-none bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold py-2.5 pl-4 pr-8 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-100 transition-all text-xs h-full"
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+            </div>
+          </div>
+
           {/* BOTÃO EXCEL */}
           <button
             onClick={handleDownloadExcel}
-            disabled={stats.loading}
-            className="w-full md:w-auto justify-center bg-white text-red-600 border border-red-200 px-5 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm text-xs active:scale-95 disabled:opacity-50 uppercase tracking-wide"
+            disabled={loading}
+            className="justify-center bg-red-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-red-700 transition-all shadow-md shadow-red-200 text-xs active:scale-95 disabled:opacity-50 uppercase tracking-wide"
           >
             <FileSpreadsheet size={18} />
-            <span className="truncate">{`Relatório de ${formattedMonthName}`}</span>
+            <span className="hidden md:inline">EXPORTAR</span>
           </button>
-
-          <div className="w-full md:w-auto justify-center flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100">
-            <div className="bg-red-50 p-2 rounded-lg text-red-600">
-              <CalendarDays size={20} />
-            </div>
-            <span className="text-sm font-black text-gray-800 capitalize leading-tight">
-              {todayStr}
-            </span>
-          </div>
         </div>
       </div>
 
-      {/* KPIS - Grid Responsivo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
-        {/* CARD 1 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden group">
-          <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-          <div className="relative z-10 flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Total SKUs
-              </p>
-              <h3 className="text-3xl font-black text-gray-800 mt-1">
-                {stats.loading ? "..." : stats.totalProducts}
-              </h3>
+      {/* ✨ RENDERIZAÇÃO CONDICIONAL DOS CARDS */}
+      {viewMode === "stock" ? (
+        // 📦 MODO ESTOQUE (SEU CÓDIGO ORIGINAL)
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Total SKUs */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden group">
+            <div className="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+            <div className="relative z-10 flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Total SKUs
+                </p>
+                <h3 className="text-3xl font-black text-gray-800 mt-1">
+                  {loading ? "..." : dashboardData?.summary?.totalSkus || 0}
+                </h3>
+              </div>
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                <Package size={20} />
+              </div>
             </div>
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-              <Package size={20} />
+            <div className="relative z-10 flex items-center gap-1 text-xs font-bold text-emerald-600 w-fit rounded-md mt-auto pt-2">
+              <TrendingUp size={12} /> Base ativa
             </div>
           </div>
-          <div className="relative z-10 flex items-center gap-1 text-xs font-bold text-emerald-600 w-fit rounded-md mt-auto pt-2">
-            <TrendingUp size={12} /> Base ativa
-          </div>
-        </div>
 
-        {/* CARD 2 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
-          {stats.lowStock > 0 && (
-            <div className="absolute top-0 right-0 w-1.5 h-full bg-red-500"></div>
-          )}
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Reposição
-              </p>
-              <h3
-                className={`text-3xl font-black mt-1 ${
-                  stats.lowStock > 0 ? "text-red-600" : "text-gray-800"
-                }`}
+          {/* Reposição */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
+            {(dashboardData?.summary?.lowStock || 0) > 0 && (
+              <div className="absolute top-0 right-0 w-1.5 h-full bg-red-500"></div>
+            )}
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Reposição
+                </p>
+                <h3
+                  className={`text-3xl font-black mt-1 ${(dashboardData?.summary?.lowStock || 0) > 0 ? "text-red-600" : "text-gray-800"}`}
+                >
+                  {loading ? "..." : dashboardData?.summary?.lowStock || 0}
+                </h3>
+              </div>
+              <div
+                className={`p-2 rounded-lg ${(dashboardData?.summary?.lowStock || 0) > 0 ? "bg-red-50 text-red-600 animate-pulse" : "bg-gray-50 text-gray-400"}`}
               >
-                {stats.loading ? "..." : stats.lowStock}
-              </h3>
+                <AlertTriangle size={20} />
+              </div>
             </div>
-            <div
-              className={`p-2 rounded-lg ${
-                stats.lowStock > 0
-                  ? "bg-red-50 text-red-600 animate-pulse"
-                  : "bg-gray-50 text-gray-400"
-              }`}
-            >
-              <AlertTriangle size={20} />
-            </div>
+            <p className="text-xs text-gray-400 font-medium mt-auto pt-2">
+              Itens abaixo do mínimo
+            </p>
           </div>
-          <p className="text-xs text-gray-400 font-medium mt-auto pt-2">
-            Itens abaixo do mínimo
-          </p>
-        </div>
 
-        {/* CARD 3 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
-          <div className="flex justify-between items-start">
+          {/* Entradas */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Entradas ({months[selectedMonth].substring(0, 3)})
+                </p>
+                <h3 className="text-3xl font-black text-gray-800 mt-1">
+                  {loading
+                    ? "..."
+                    : dashboardData?.summary?.monthlyEntries || 0}
+                </h3>
+              </div>
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                <ArrowUpRight size={20} />
+              </div>
+            </div>
+            <p className="text-xs text-emerald-600 font-bold mt-auto pt-2 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block"></span>{" "}
+              Acumulado
+            </p>
+          </div>
+
+          {/* Saídas */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Saídas ({months[selectedMonth].substring(0, 3)})
+                </p>
+                <h3 className="text-3xl font-black text-gray-800 mt-1">
+                  {loading ? "..." : dashboardData?.summary?.monthlyExits || 0}
+                </h3>
+              </div>
+              <div className="p-2 bg-red-50 text-red-600 rounded-lg">
+                <ArrowDownRight size={20} />
+              </div>
+            </div>
+            <p className="text-xs text-red-500 font-bold mt-auto pt-2 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-red-500 rounded-full inline-block"></span>{" "}
+              Acumulado
+            </p>
+          </div>
+        </div>
+      ) : (
+        // 💰 MODO FINANCEIRO (NOVOS CARDS)
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Valor em Estoque (Custo) */}
+          <div className="bg-white p-6 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-50 rounded-bl-full -mr-4 -mt-4"></div>
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Entradas ({formattedMonthName.substring(0, 3)})
+                Patrimônio (Custo)
               </p>
-              <h3 className="text-3xl font-black text-gray-800 mt-1">
-                {stats.loading ? "..." : stats.totalEntries}
+              <h3 className="text-2xl font-black text-emerald-900 mt-1 truncate">
+                {loading
+                  ? "..."
+                  : formatCurrency(
+                      dashboardData?.summary?.totalStockValue || 0,
+                    )}
               </h3>
             </div>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
-              <ArrowUpRight size={20} />
+            <div className="relative z-10 flex items-center gap-1 text-xs font-bold text-emerald-600 mt-auto pt-2">
+              <PiggyBank size={14} /> Dinheiro imobilizado
             </div>
           </div>
-          <p className="text-xs text-emerald-600 font-bold mt-auto pt-2 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block"></span>{" "}
-            Acumulado
-          </p>
-        </div>
 
-        {/* CARD 4 */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Saídas ({formattedMonthName.substring(0, 3)})
-              </p>
-              <h3 className="text-3xl font-black text-gray-800 mt-1">
-                {stats.loading ? "..." : stats.totalExits}
-              </h3>
+          {/* Faturamento do Mês */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Faturamento ({months[selectedMonth].substring(0, 3)})
+                </p>
+                <h3 className="text-2xl font-black text-gray-800 mt-1 truncate">
+                  {loading
+                    ? "..."
+                    : formatCurrency(
+                        dashboardData?.summary?.monthlyRevenue || 0,
+                      )}
+                </h3>
+              </div>
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                <ArrowUpRight size={20} />
+              </div>
             </div>
-            <div className="p-2 bg-red-50 text-red-600 rounded-lg">
-              <ArrowDownRight size={20} />
-            </div>
+            <p className="text-xs text-emerald-600 font-bold mt-auto pt-2 flex items-center gap-1">
+              Receita de Vendas
+            </p>
           </div>
-          <p className="text-xs text-red-500 font-bold mt-auto pt-2 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 bg-red-500 rounded-full inline-block"></span>{" "}
-            Acumulado
-          </p>
+
+          {/* Despesas do Mês */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Compras ({months[selectedMonth].substring(0, 3)})
+                </p>
+                <h3 className="text-2xl font-black text-gray-800 mt-1 truncate">
+                  {loading
+                    ? "..."
+                    : formatCurrency(dashboardData?.summary?.monthlyCost || 0)}
+                </h3>
+              </div>
+              <div className="p-2 bg-red-50 text-red-600 rounded-lg">
+                <ArrowDownRight size={20} />
+              </div>
+            </div>
+            <p className="text-xs text-red-500 font-bold mt-auto pt-2 flex items-center gap-1">
+              Custo de Reposição
+            </p>
+          </div>
+
+          {/* Potencial de Lucro */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between min-h-[140px]">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Potencial de Venda
+                </p>
+                <h3 className="text-2xl font-black text-gray-800 mt-1 truncate">
+                  {loading
+                    ? "..."
+                    : formatCurrency(
+                        dashboardData?.summary?.potentialRevenue || 0,
+                      )}
+                </h3>
+              </div>
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                <Wallet size={20} />
+              </div>
+            </div>
+            <p className="text-xs text-blue-500 font-bold mt-auto pt-2 flex items-center gap-1">
+              Previsão Total
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ÁREA CENTRAL */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
-          {/* O Gráfico geralmente se adapta bem, mas garantimos o container */}
-          <OverviewChart data={stats.chartData} />
+          {/* ✨ GRÁFICO AGORA RECEBE A PROP DE MODO FINANCEIRO */}
+          <OverviewChart
+            data={dashboardData?.chartData || []}
+            isFinancial={viewMode === "financial"}
+          />
         </div>
 
         <div className="flex flex-col gap-6">
