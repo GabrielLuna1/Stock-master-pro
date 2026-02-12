@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   X,
   Loader2,
@@ -11,6 +11,8 @@ import {
   Barcode,
   Camera,
   Search,
+  RefreshCw,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Html5Qrcode } from "html5-qrcode";
@@ -31,11 +33,12 @@ export default function AddProductModal({
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [searchingEan, setSearchingEan] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
     sku: "",
-    ean: "", // ✨ Campo de Código de Barras
+    ean: "",
     category: "",
     supplier: "",
     quantity: "",
@@ -45,70 +48,94 @@ export default function AddProductModal({
     location: "ALMOXARIFADO",
   });
 
-  // 1. GERA SKU AUTOMÁTICO
-  useEffect(() => {
+  const generateSku = () => {
     const random = Math.floor(Math.random() * 9000) + 1000;
     setFormData((prev) => ({ ...prev, sku: `MASTER-${random}` }));
+  };
+
+  useEffect(() => {
+    generateSku();
   }, []);
 
-  // 2. LÓGICA DO SCANNER (CÂMERA)
-  useEffect(() => {
-    let html5QrCode: Html5Qrcode | null = null;
-
-    if (isScanning) {
-      html5QrCode = new Html5Qrcode("reader");
-      const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-
-      html5QrCode
-        .start(
+  const startScanner = async () => {
+    setIsScanning(true);
+    setTimeout(async () => {
+      try {
+        const scanner = new Html5Qrcode("reader");
+        scannerRef.current = scanner;
+        await scanner.start(
           { facingMode: "environment" },
-          config,
+          { fps: 10, qrbox: { width: 250, height: 150 } },
           (decodedText) => {
             setFormData((prev) => ({ ...prev, ean: decodedText }));
-            setIsScanning(false);
+            stopScanner();
             handleSearchEan(decodedText);
-            toast.success("Código lido com sucesso!");
+            toast.success("Código capturado!");
           },
           () => {},
-        )
-        .catch((err) => {
-          console.error(err);
-          toast.error("Permissão de câmera negada ou erro no dispositivo.");
-          setIsScanning(false);
-        });
-    }
-
-    return () => {
-      if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().catch((e) => console.error(e));
+        );
+      } catch (err) {
+        toast.error("Erro ao acessar câmera.");
+        setIsScanning(false);
       }
-    };
-  }, [isScanning]);
+    }, 300);
+  };
 
-  // 3. BUSCA INTELIGENTE DE PRODUTO
+  const stopScanner = async () => {
+    if (scannerRef.current && scannerRef.current.isScanning) {
+      await scannerRef.current.stop();
+      scannerRef.current = null;
+    }
+    setIsScanning(false);
+  };
+
+  // 🔍 BUSCA GRATUITA E DIRETA (Sem necessidade de Token)
   const handleSearchEan = async (eanToSearch?: string) => {
     const code = eanToSearch || formData.ean;
-    if (!code || code.length < 8) return;
+
+    // Validação básica de tamanho de código EAN
+    if (!code || code.length < 8) {
+      return toast.warning("Digite um código de barras válido.");
+    }
 
     setSearchingEan(true);
     try {
+      // 🌍 Buscando na OpenFoodFacts (Base que pegava a Oreo antes)
       const res = await fetch(
         `https://world.openfoodfacts.org/api/v0/product/${code}.json`,
       );
       const data = await res.json();
 
-      if (data.status === 1) {
+      if (data.status === 1 && data.product) {
+        // Prioriza o nome em português para produtos como Oreo e Coca
+        const productName =
+          data.product.product_name_pt ||
+          data.product.product_name ||
+          data.product.generic_name;
+
         setFormData((prev) => ({
           ...prev,
-          name: data.product.product_name || prev.name,
-          category: prev.category || "Geral",
+          name: productName.toUpperCase(), // Mantém o padrão Master em caixa alta
+          category: prev.category || "GERAL",
         }));
-        toast.success("Dados importados da base pública!");
+
+        toast.success("Produto localizado com sucesso!");
       } else {
-        toast.info("Produto não encontrado na base externa, mas código salvo.");
+        toast.info(
+          "Produto não encontrado na base gratuita. Digite o nome manualmente.",
+        );
+        // Foca no nome para você não perder tempo
+        setTimeout(() => {
+          const input = document.querySelector(
+            'input[placeholder*="Coca Cola"]',
+          ) as HTMLInputElement;
+          input?.focus();
+        }, 500);
       }
     } catch (error) {
-      console.error(error);
+      // Se der erro de rede, avisa o usuário
+      toast.error("Erro ao conectar com o serviço de busca.");
+      console.error("Erro na busca EAN:", error);
     } finally {
       setSearchingEan(false);
     }
@@ -118,8 +145,6 @@ export default function AddProductModal({
     e.preventDefault();
     setLoading(true);
     try {
-      if (!formData.category) return toast.warning("Selecione uma categoria.");
-
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,12 +156,7 @@ export default function AddProductModal({
           costPrice: Number(formData.costPrice),
         }),
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erro ao salvar");
-      }
-
+      if (!res.ok) throw new Error("Erro ao salvar");
       toast.success("Produto cadastrado!");
       onRefresh();
       onClose();
@@ -148,34 +168,36 @@ export default function AddProductModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
-        {/* HEADER */}
-        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-start bg-gray-50/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-[24px] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        {/* HEADER VIVID */}
+        <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
           <div>
-            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
-              NOVO ITEM <span className="text-red-600">MASTER</span>
+            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter leading-none">
+              Novo Item <span className="text-red-600">Master</span>
             </h2>
-            <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-wider">
+            <p className="text-sm font-bold text-gray-400 mt-2 uppercase tracking-widest">
               Cadastro de Inventário v2.0
             </p>
           </div>
           <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-red-500 transition-colors"
+            onClick={() => {
+              stopScanner();
+              onClose();
+            }}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <X size={24} />
+            <X size={28} className="text-gray-400 hover:text-red-500" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto custom-scrollbar">
-          {/* 📷 SCANNER CONTAINER (Apenas quando ativo) */}
+        <div className="p-8 overflow-y-auto custom-scrollbar">
           {isScanning && (
-            <div className="mb-6 bg-black rounded-2xl overflow-hidden relative border-4 border-red-600 shadow-xl min-h-[250px]">
+            <div className="mb-8 bg-black rounded-2xl overflow-hidden relative border-4 border-red-600 shadow-xl">
               <div id="reader" className="w-full"></div>
               <button
-                onClick={() => setIsScanning(false)}
-                className="absolute top-4 right-4 bg-red-600 text-white p-2 rounded-full z-20"
+                onClick={stopScanner}
+                className="absolute top-4 right-4 bg-red-600 text-white p-2 rounded-full z-20 shadow-lg"
               >
                 <X size={20} />
               </button>
@@ -185,66 +207,65 @@ export default function AddProductModal({
           <form
             id="add-product-form"
             onSubmit={handleSubmit}
-            className="space-y-6"
+            className="space-y-8"
           >
-            {/* 🔴 SEÇÃO CÓDIGO DE BARRAS (DEVE APARECER AQUI!) */}
-            <div className="bg-red-50 p-4 rounded-xl border border-red-100 space-y-3">
-              <h3 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
-                <Barcode size={14} /> Identificação EAN
+            {/* 🔴 SEÇÃO EAN VIVID */}
+            <div className="bg-red-50/50 p-6 rounded-2xl border border-red-100 space-y-4">
+              <h3 className="text-sm font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
+                <Barcode size={18} /> Código de Barras
               </h3>
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <div className="relative flex-1">
                   <input
                     type="text"
-                    placeholder="Escaneie ou digite o EAN..."
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-red-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-sm"
+                    placeholder="Bipe ou digite o código..."
+                    className="w-full pl-12 pr-4 py-4 bg-white border border-red-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-lg shadow-sm"
                     value={formData.ean}
                     onChange={(e) =>
                       setFormData({ ...formData, ean: e.target.value })
                     }
                   />
                   <Barcode
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400"
-                    size={18}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-red-400"
+                    size={22}
                   />
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsScanning(true)}
-                  className="bg-red-600 text-white p-3 rounded-xl hover:bg-red-700 active:scale-95 transition-all shadow-md shadow-red-200"
+                  onClick={startScanner}
+                  className="bg-red-600 text-white px-6 rounded-xl hover:bg-red-700 shadow-md active:scale-95"
                 >
-                  <Camera size={20} />
+                  <Camera size={26} />
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSearchEan()}
                   disabled={searchingEan || !formData.ean}
-                  className="bg-white border border-red-200 text-red-600 p-3 rounded-xl disabled:opacity-50"
+                  className="bg-white border border-red-200 text-red-600 px-6 rounded-xl hover:bg-red-50 transition-all flex items-center justify-center"
                 >
                   {searchingEan ? (
-                    <Loader2 size={20} className="animate-spin" />
+                    <Loader2 size={26} className="animate-spin" />
                   ) : (
-                    <Search size={20} />
+                    <Search size={26} />
                   )}
                 </button>
               </div>
             </div>
 
-            {/* 📦 DADOS BÁSICOS */}
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
-                <Package size={14} /> Descrição do Produto
+            {/* 📦 IDENTIFICAÇÃO VIVID */}
+            <div className="space-y-5">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
+                <Package size={18} /> Identificação
               </h3>
-
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
-                  Nome Completo *
+                <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
+                  Nome do Produto *
                 </label>
                 <input
                   required
                   type="text"
                   placeholder="Ex: Coca Cola 350ml (Lata)"
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-sm"
+                  className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 outline-none font-bold text-gray-900 text-lg"
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
@@ -252,14 +273,14 @@ export default function AddProductModal({
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
                     Categoria *
                   </label>
                   <select
                     required
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 text-sm font-medium text-gray-700"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-800 text-base appearance-none cursor-pointer"
                     value={formData.category}
                     onChange={(e) =>
                       setFormData({ ...formData, category: e.target.value })
@@ -268,17 +289,17 @@ export default function AddProductModal({
                     <option value="">Selecione...</option>
                     {categories.map((cat) => (
                       <option key={cat._id} value={cat.name}>
-                        {cat.name}
+                        {cat.name.toUpperCase()}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
                     Fornecedor
                   </label>
                   <select
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 text-sm font-medium text-gray-700"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-800 text-base appearance-none cursor-pointer"
                     value={formData.supplier}
                     onChange={(e) =>
                       setFormData({ ...formData, supplier: e.target.value })
@@ -287,7 +308,7 @@ export default function AddProductModal({
                     <option value="">Sem vínculo (Próprio)</option>
                     {suppliers.map((sup) => (
                       <option key={sup._id} value={sup._id}>
-                        {sup.name}
+                        {sup.name.toUpperCase()}
                       </option>
                     ))}
                   </select>
@@ -295,23 +316,20 @@ export default function AddProductModal({
               </div>
             </div>
 
-            {/* 💰 VALORES E ESTOQUE */}
-            <div className="space-y-4 pt-2">
-              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
-                <DollarSign size={14} /> Financeiro & Inventário
+            {/* 💰 VALORES VIVID */}
+            <div className="space-y-5">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
+                <DollarSign size={18} /> Financeiro
               </h3>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-5">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
                     Custo (R$)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
-                    placeholder="0,00"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-900 text-sm"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-lg focus:border-red-500 outline-none"
                     value={formData.costPrice}
                     onChange={(e) =>
                       setFormData({ ...formData, costPrice: e.target.value })
@@ -319,82 +337,104 @@ export default function AddProductModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  <label className="block text-sm font-black text-emerald-600 uppercase mb-2 ml-1">
                     Venda (R$)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
-                    placeholder="0,00"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-900 text-sm"
+                    className="w-full px-5 py-4 bg-emerald-50/50 border border-emerald-100 rounded-xl font-black text-emerald-700 text-xl focus:border-emerald-500 outline-none"
                     value={formData.price}
                     onChange={(e) =>
                       setFormData({ ...formData, price: e.target.value })
                     }
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[9px] font-bold text-gray-500 uppercase mb-1">
-                    SKU Master
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1 flex items-center gap-1">
+                    <MapPin size={14} /> Local
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[10px] font-mono text-gray-400"
-                    value={formData.sku}
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-gray-500 uppercase mb-1 text-center">
-                    Qtd Inicial
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    min="0"
-                    className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-black text-gray-900 text-center"
-                    value={formData.quantity}
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl font-black text-gray-700 uppercase text-base focus:border-red-500 outline-none"
+                    value={formData.location}
                     onChange={(e) =>
-                      setFormData({ ...formData, quantity: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-gray-500 uppercase mb-1 text-center">
-                    Mínimo
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-black text-red-500 text-center"
-                    value={formData.minStock}
-                    onChange={(e) =>
-                      setFormData({ ...formData, minStock: e.target.value })
+                      setFormData({
+                        ...formData,
+                        location: e.target.value.toUpperCase(),
+                      })
                     }
                   />
                 </div>
               </div>
             </div>
+
+            {/* 🔢 ESTOQUE VIVID */}
+            <div className="grid grid-cols-3 gap-5">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center px-1">
+                  <label className="text-xs font-black text-gray-400 uppercase">
+                    SKU Master
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateSku}
+                    className="text-red-500 hover:rotate-180 transition-transform"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  className="w-full py-4 bg-white border-2 border-dashed border-gray-200 rounded-xl font-mono text-base text-center font-black text-gray-800"
+                  value={formData.sku}
+                  readOnly
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-black text-gray-600 uppercase mb-2 text-center">
+                  Quantidade
+                </label>
+                <input
+                  required
+                  type="number"
+                  className="w-full py-4 bg-gray-100 border-2 border-gray-200 rounded-xl font-black text-center text-2xl text-gray-900"
+                  value={formData.quantity}
+                  onChange={(e) =>
+                    setFormData({ ...formData, quantity: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-black text-red-500 uppercase mb-2 text-center">
+                  Mínimo
+                </label>
+                <input
+                  required
+                  type="number"
+                  className="w-full py-4 bg-red-50 border-2 border-red-100 rounded-xl font-black text-center text-2xl text-red-600"
+                  value={formData.minStock}
+                  onChange={(e) =>
+                    setFormData({ ...formData, minStock: e.target.value })
+                  }
+                />
+              </div>
+            </div>
           </form>
         </div>
 
-        {/* BOTÃO CONFIRMAR */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50/50">
+        {/* FOOTER */}
+        <div className="p-8 border-t border-gray-100 bg-gray-50/50">
           <button
             type="submit"
             form="add-product-form"
             disabled={loading}
-            className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl shadow-lg shadow-red-200 transition-all active:scale-95 uppercase tracking-widest text-sm flex items-center justify-center gap-2"
+            className="w-full py-6 bg-red-600 hover:bg-red-700 text-white font-black rounded-[20px] shadow-2xl transition-all active:scale-[0.97] uppercase tracking-[0.2em] text-lg flex items-center justify-center gap-4"
           >
             {loading ? (
-              <Loader2 className="animate-spin" />
+              <Loader2 className="animate-spin" size={28} />
             ) : (
-              "Confirmar Cadastro"
+              "Finalizar Cadastro Master"
             )}
           </button>
         </div>

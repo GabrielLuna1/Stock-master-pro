@@ -1,15 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Loader2, Package, Layers, Truck, DollarSign } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  X,
+  Loader2,
+  Package,
+  Layers,
+  Truck,
+  DollarSign,
+  Barcode,
+  Camera,
+  Search,
+  MapPin,
+  RefreshCw,
+} from "lucide-react";
 import { toast } from "sonner";
+import { Html5Qrcode } from "html5-qrcode";
 
 interface EditProductModalProps {
   product: any;
   onClose: () => void;
   onRefresh: () => void;
-  categories: any[]; // ✨ Agora aceita categorias
-  suppliers: any[]; // ✨ Agora aceita fornecedores
+  categories: any[];
+  suppliers: any[];
 }
 
 export default function EditProductModal({
@@ -20,61 +33,117 @@ export default function EditProductModal({
   suppliers,
 }: EditProductModalProps) {
   const [loading, setLoading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [searchingEan, setSearchingEan] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  // Estado do formulário
   const [formData, setFormData] = useState({
     name: "",
+    ean: "",
     category: "",
     supplier: "",
-    minStock: "",
+    quantity: "", // Mantemos para visualização/ajuste rápido
+    minStock: "15",
     price: "",
     costPrice: "",
     location: "",
   });
 
-  // Preenche os dados quando o produto muda (ao abrir o modal)
   useEffect(() => {
     if (product) {
       setFormData({
         name: product.name || "",
+        ean: product.ean || "",
         category: product.category || "",
-        // Lógica inteligente: Se o supplier vier populado (objeto), pega o _id. Se vier só ID (string), usa direto.
         supplier:
-          typeof product.supplier === "object" && product.supplier !== null
-            ? product.supplier._id
+          typeof product.supplier === "object"
+            ? product.supplier?._id
             : product.supplier || "",
-
-        // Pega minStock (antigo) ou minQuantity (novo)
-        minStock: String(product.minStock || product.minQuantity || "15"),
-
+        quantity: String(product.quantity || "0"),
+        minStock: String(product.minStock || "15"),
         price: String(product.price || "0"),
         costPrice: String(product.costPrice || "0"),
-        location: product.location || "",
+        location: product.location || "ALMOXARIFADO",
       });
     }
   }, [product]);
 
+  // Lógica do Scanner (Igual ao Cadastro)
+  const startScanner = async () => {
+    setIsScanning(true);
+    setTimeout(async () => {
+      try {
+        const scanner = new Html5Qrcode("reader");
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 150 } },
+          (decodedText) => {
+            setFormData((prev) => ({ ...prev, ean: decodedText }));
+            stopScanner();
+            handleSearchEan(decodedText);
+            toast.success("Código capturado!");
+          },
+          () => {},
+        );
+      } catch (err) {
+        toast.error("Erro ao acessar câmera.");
+        setIsScanning(false);
+      }
+    }, 300);
+  };
+
+  const stopScanner = async () => {
+    if (scannerRef.current && scannerRef.current.isScanning) {
+      await scannerRef.current.stop();
+      scannerRef.current = null;
+    }
+    setIsScanning(false);
+  };
+
+  const handleSearchEan = async (eanToSearch?: string) => {
+    const code = eanToSearch || formData.ean;
+    if (!code || code.length < 8) return;
+    setSearchingEan(true);
+    try {
+      const res = await fetch(
+        `https://world.openfoodfacts.org/api/v0/product/${code}.json`,
+      );
+      const data = await res.json();
+      if (data.status === 1) {
+        setFormData((prev) => ({
+          ...prev,
+          name: (
+            data.product.product_name_pt || data.product.product_name
+          ).toUpperCase(),
+        }));
+        toast.success("Dados sincronizados!");
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setSearchingEan(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const res = await fetch("/api/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          _id: product._id, // Importante enviar o ID para saber quem atualizar
+          _id: product._id,
           ...formData,
+          quantity: Number(formData.quantity),
           minStock: Number(formData.minStock),
           price: Number(formData.price),
           costPrice: Number(formData.costPrice),
         }),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao atualizar");
-
-      toast.success("Produto atualizado com sucesso!");
+      if (!res.ok) throw new Error("Erro ao atualizar");
+      toast.success("Alterações Master salvas!");
       onRefresh();
       onClose();
     } catch (error: any) {
@@ -85,47 +154,103 @@ export default function EditProductModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* HEADER */}
-        <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-start bg-gray-50/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-[24px] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        {/* HEADER VIVID */}
+        <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
           <div>
-            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
-              EDITAR ITEM <span className="text-red-600">MASTER</span>
+            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter leading-none">
+              Editar Item <span className="text-red-600">Master</span>
             </h2>
-            <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-wider">
+            <p className="text-sm font-bold text-gray-400 mt-2 uppercase tracking-widest">
               SKU: {product.sku}
             </p>
           </div>
           <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-red-500 transition-colors"
+            onClick={() => {
+              stopScanner();
+              onClose();
+            }}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <X size={24} />
+            <X size={28} className="text-gray-400 hover:text-red-500" />
           </button>
         </div>
 
-        {/* FORMULÁRIO COM SCROLL */}
         <div className="p-8 overflow-y-auto custom-scrollbar">
+          {/* SCANNER CONTAINER */}
+          {isScanning && (
+            <div className="mb-8 bg-black rounded-2xl overflow-hidden relative border-4 border-red-600 shadow-xl">
+              <div id="reader" className="w-full"></div>
+              <button
+                onClick={stopScanner}
+                className="absolute top-4 right-4 bg-red-600 text-white p-2 rounded-full z-20"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          )}
+
           <form
             id="edit-product-form"
             onSubmit={handleSubmit}
-            className="space-y-6"
+            className="space-y-8"
           >
-            {/* 1. DADOS GERAIS */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4 flex items-center gap-2">
-                <Package size={14} /> Dados Gerais
+            {/* 🔴 SEÇÃO EAN VIVID + CAMERA */}
+            <div className="bg-red-50/50 p-6 rounded-2xl border border-red-100 space-y-4">
+              <h3 className="text-sm font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
+                <Barcode size={18} /> Sincronizar Código de Barras
               </h3>
+              <div className="flex gap-3">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    className="w-full pl-12 pr-4 py-4 bg-white border border-red-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-lg shadow-sm"
+                    value={formData.ean}
+                    onChange={(e) =>
+                      setFormData({ ...formData, ean: e.target.value })
+                    }
+                  />
+                  <Barcode
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-red-400"
+                    size={22}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={startScanner}
+                  className="bg-red-600 text-white px-6 rounded-xl hover:bg-red-700 active:scale-95 transition-all"
+                >
+                  <Camera size={26} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSearchEan()}
+                  disabled={searchingEan}
+                  className="bg-white border border-red-200 text-red-600 px-6 rounded-xl"
+                >
+                  {searchingEan ? (
+                    <Loader2 size={26} className="animate-spin" />
+                  ) : (
+                    <Search size={26} />
+                  )}
+                </button>
+              </div>
+            </div>
 
+            {/* 📦 IDENTIFICAÇÃO */}
+            <div className="space-y-5">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
+                <Package size={18} /> Identificação Principal
+              </h3>
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
-                  Nome do Produto
+                <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
+                  Descrição do Produto *
                 </label>
                 <input
                   required
                   type="text"
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-sm"
+                  className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 outline-none font-bold text-gray-900 text-lg"
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
@@ -133,43 +258,42 @@ export default function EditProductModal({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
-                    <Layers size={10} /> Categoria
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
+                    Categoria *
                   </label>
                   <select
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 text-sm font-medium text-gray-700 appearance-none"
+                    required
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-800 text-base appearance-none cursor-pointer"
                     value={formData.category}
                     onChange={(e) =>
                       setFormData({ ...formData, category: e.target.value })
                     }
                   >
                     <option value="">Selecione...</option>
-                    {/* Mapeia as categorias recebidas via PROPS */}
                     {categories.map((cat) => (
                       <option key={cat._id} value={cat.name}>
-                        {cat.name}
+                        {cat.name.toUpperCase()}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
-                    <Truck size={10} /> Fornecedor
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
+                    Fornecedor Principal
                   </label>
                   <select
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 text-sm font-medium text-gray-700 appearance-none"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-800 text-base appearance-none cursor-pointer"
                     value={formData.supplier}
                     onChange={(e) =>
                       setFormData({ ...formData, supplier: e.target.value })
                     }
                   >
                     <option value="">Sem vínculo (Próprio)</option>
-                    {/* Mapeia os fornecedores recebidos via PROPS */}
                     {suppliers.map((sup) => (
                       <option key={sup._id} value={sup._id}>
-                        {sup.name}
+                        {sup.name.toUpperCase()}
                       </option>
                     ))}
                   </select>
@@ -177,22 +301,20 @@ export default function EditProductModal({
               </div>
             </div>
 
-            {/* 2. FINANCEIRO & CONFIG */}
-            <div className="space-y-4 pt-2">
-              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4 flex items-center gap-2">
-                <DollarSign size={14} /> Ajustes & Valores
+            {/* 💰 FINANCEIRO & LOCALIZAÇÃO */}
+            <div className="space-y-5">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
+                <DollarSign size={18} /> Financeiro & Alocação
               </h3>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-5">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
                     Custo (R$)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-900 text-sm"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-lg focus:border-red-500 outline-none"
                     value={formData.costPrice}
                     onChange={(e) =>
                       setFormData({ ...formData, costPrice: e.target.value })
@@ -200,68 +322,95 @@ export default function EditProductModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                  <label className="block text-sm font-black text-emerald-600 uppercase mb-2 ml-1">
                     Venda (R$)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-900 text-sm"
+                    className="w-full px-5 py-4 bg-emerald-50/50 border border-emerald-100 rounded-xl font-black text-emerald-700 text-xl focus:border-emerald-500 outline-none shadow-inner"
                     value={formData.price}
                     onChange={(e) =>
                       setFormData({ ...formData, price: e.target.value })
                     }
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
-                    Estoque Mínimo
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-center"
-                    value={formData.minStock}
-                    onChange={(e) =>
-                      setFormData({ ...formData, minStock: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
-                    Localização
+                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1 flex items-center gap-1">
+                    <MapPin size={14} /> Localização
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: Corredor A"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 font-medium text-gray-700 text-center"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl font-black text-gray-700 uppercase text-base focus:border-red-500 outline-none"
                     value={formData.location}
                     onChange={(e) =>
-                      setFormData({ ...formData, location: e.target.value })
+                      setFormData({
+                        ...formData,
+                        location: e.target.value.toUpperCase(),
+                      })
                     }
                   />
                 </div>
               </div>
             </div>
+
+            {/* 🔢 GRID DE ESTOQUE (PADRONIZADO) */}
+            <div className="grid grid-cols-3 gap-5 pt-2">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-gray-400 uppercase tracking-tighter ml-1">
+                  SKU Master
+                </label>
+                <input
+                  type="text"
+                  className="w-full py-4 bg-white border-2 border-dashed border-gray-200 rounded-xl font-mono text-base text-center font-black text-gray-400"
+                  value={product.sku}
+                  readOnly
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-black text-gray-600 uppercase mb-2 text-center">
+                  Quantidade Atual
+                </label>
+                <input
+                  required
+                  type="number"
+                  className="w-full py-4 bg-gray-100 border-2 border-gray-200 rounded-xl font-black text-center text-2xl text-gray-900"
+                  value={formData.quantity}
+                  onChange={(e) =>
+                    setFormData({ ...formData, quantity: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-black text-red-500 uppercase mb-2 text-center">
+                  Mínimo Master
+                </label>
+                <input
+                  required
+                  type="number"
+                  className="w-full py-4 bg-red-50 border-2 border-red-100 rounded-xl font-black text-center text-2xl text-red-600 focus:border-red-500 outline-none"
+                  value={formData.minStock}
+                  onChange={(e) =>
+                    setFormData({ ...formData, minStock: e.target.value })
+                  }
+                />
+              </div>
+            </div>
           </form>
         </div>
 
-        {/* FOOTER */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50/50">
+        {/* FOOTER - Botão GIGANTE */}
+        <div className="p-8 border-t border-gray-100 bg-gray-50/50">
           <button
             type="submit"
             form="edit-product-form"
             disabled={loading}
-            className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition-all active:scale-95 uppercase tracking-wide text-sm flex items-center justify-center gap-2"
+            className="w-full py-6 bg-red-600 hover:bg-red-700 text-white font-black rounded-[20px] shadow-2xl transition-all active:scale-[0.97] uppercase tracking-[0.2em] text-lg flex items-center justify-center gap-4"
           >
             {loading ? (
-              <Loader2 className="animate-spin" />
+              <Loader2 className="animate-spin" size={28} />
             ) : (
-              "Salvar Alterações"
+              "Salvar Alterações Master"
             )}
           </button>
         </div>
