@@ -5,8 +5,6 @@ import {
   X,
   Loader2,
   Package,
-  Layers,
-  Truck,
   DollarSign,
   Barcode,
   Camera,
@@ -118,6 +116,8 @@ export default function EditProductModal({
           ).toUpperCase(),
         }));
         toast.success("Dados sincronizados!");
+      } else {
+        toast.info("Não encontrado na base global.");
       }
     } catch (error) {
       console.error(error);
@@ -154,15 +154,15 @@ export default function EditProductModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-[24px] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-[20px] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
         {/* HEADER VIVID */}
-        <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
+        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
-            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter leading-none">
+            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tighter leading-none">
               Editar Item <span className="text-red-600">Master</span>
             </h2>
-            <p className="text-sm font-bold text-gray-400 mt-2 uppercase tracking-widest">
+            <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">
               SKU: {product.sku}
             </p>
           </div>
@@ -173,14 +173,14 @@ export default function EditProductModal({
             }}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <X size={28} className="text-gray-400 hover:text-red-500" />
+            <X size={24} className="text-gray-400 hover:text-red-500" />
           </button>
         </div>
 
-        <div className="p-8 overflow-y-auto custom-scrollbar">
+        <div className="p-6 overflow-y-auto custom-scrollbar">
           {/* SCANNER CONTAINER */}
           {isScanning && (
-            <div className="mb-8 bg-black rounded-2xl overflow-hidden relative border-4 border-red-600 shadow-xl">
+            <div className="mb-6 bg-black rounded-2xl overflow-hidden relative border-4 border-red-600 shadow-xl">
               <div id="reader" className="w-full"></div>
               <button
                 onClick={stopScanner}
@@ -194,63 +194,64 @@ export default function EditProductModal({
           <form
             id="edit-product-form"
             onSubmit={handleSubmit}
-            className="space-y-8"
+            className="space-y-6"
           >
-            {/* 🔴 SEÇÃO EAN VIVID + CAMERA */}
-            <div className="bg-red-50/50 p-6 rounded-2xl border border-red-100 space-y-4">
-              <h3 className="text-sm font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
-                <Barcode size={18} /> Sincronizar Código de Barras
-              </h3>
-              <div className="flex gap-3">
+            {/* 🔴 SEÇÃO EAN (Corrigida para Mobile) */}
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100 space-y-3">
+              <label className="text-[11px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
+                <Barcode size={14} /> Sincronizar Código de Barras
+              </label>
+              <div className="flex items-stretch gap-2">
                 <div className="relative flex-1">
                   <input
                     type="text"
-                    className="w-full pl-12 pr-4 py-4 bg-white border border-red-200 rounded-xl focus:outline-none focus:border-red-500 font-bold text-gray-900 text-lg shadow-sm"
+                    placeholder="Bipe ou digite..."
+                    className="w-full pl-9 pr-3 py-3 bg-white border border-red-200 rounded-lg focus:outline-none focus:border-red-500 font-bold text-gray-900 text-sm h-full"
                     value={formData.ean}
                     onChange={(e) =>
                       setFormData({ ...formData, ean: e.target.value })
                     }
                   />
                   <Barcode
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-red-400"
-                    size={22}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400"
+                    size={16}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={startScanner}
-                  className="bg-red-600 text-white px-6 rounded-xl hover:bg-red-700 active:scale-95 transition-all"
+                  className="bg-red-600 text-white px-4 rounded-lg hover:bg-red-700 shadow-sm active:scale-95 flex items-center justify-center"
                 >
-                  <Camera size={26} />
+                  <Camera size={20} />
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSearchEan()}
-                  disabled={searchingEan}
-                  className="bg-white border border-red-200 text-red-600 px-6 rounded-xl"
+                  disabled={searchingEan || !formData.ean}
+                  className="bg-white border border-red-200 text-red-600 px-4 rounded-lg hover:bg-red-50 transition-all flex items-center justify-center"
                 >
                   {searchingEan ? (
-                    <Loader2 size={26} className="animate-spin" />
+                    <Loader2 size={20} className="animate-spin" />
                   ) : (
-                    <Search size={26} />
+                    <Search size={20} />
                   )}
                 </button>
               </div>
             </div>
 
             {/* 📦 IDENTIFICAÇÃO */}
-            <div className="space-y-5">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
-                <Package size={18} /> Identificação Principal
+            <div className="space-y-4">
+              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
+                <Package size={14} /> Identificação Principal
               </h3>
               <div>
-                <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">
                   Descrição do Produto *
                 </label>
                 <input
                   required
                   type="text"
-                  className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 outline-none font-bold text-gray-900 text-lg"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 outline-none font-bold text-gray-900 text-sm"
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
@@ -258,14 +259,14 @@ export default function EditProductModal({
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">
                     Categoria *
                   </label>
                   <select
                     required
-                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-800 text-base appearance-none cursor-pointer"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-700 text-xs appearance-none"
                     value={formData.category}
                     onChange={(e) =>
                       setFormData({ ...formData, category: e.target.value })
@@ -280,11 +281,11 @@ export default function EditProductModal({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">
                     Fornecedor Principal
                   </label>
                   <select
-                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-800 text-base appearance-none cursor-pointer"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-red-500 font-bold text-gray-700 text-xs appearance-none"
                     value={formData.supplier}
                     onChange={(e) =>
                       setFormData({ ...formData, supplier: e.target.value })
@@ -302,19 +303,20 @@ export default function EditProductModal({
             </div>
 
             {/* 💰 FINANCEIRO & LOCALIZAÇÃO */}
-            <div className="space-y-5">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
-                <DollarSign size={18} /> Financeiro & Alocação
+            <div className="space-y-4 pt-2">
+              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex items-center gap-2">
+                <DollarSign size={14} /> Financeiro & Alocação
               </h3>
-              <div className="grid grid-cols-3 gap-5">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1">
-                    Custo (R$)
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">
+                    Custo
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-lg focus:border-red-500 outline-none"
+                    placeholder="0.00"
+                    className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 text-sm focus:border-red-500 outline-none"
                     value={formData.costPrice}
                     onChange={(e) =>
                       setFormData({ ...formData, costPrice: e.target.value })
@@ -322,13 +324,14 @@ export default function EditProductModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-black text-emerald-600 uppercase mb-2 ml-1">
-                    Venda (R$)
+                  <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-1 ml-1">
+                    Venda
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    className="w-full px-5 py-4 bg-emerald-50/50 border border-emerald-100 rounded-xl font-black text-emerald-700 text-xl focus:border-emerald-500 outline-none shadow-inner"
+                    placeholder="0.00"
+                    className="w-full px-3 py-3 bg-emerald-50/50 border border-emerald-100 rounded-xl font-black text-emerald-700 text-sm focus:border-emerald-500 outline-none"
                     value={formData.price}
                     onChange={(e) =>
                       setFormData({ ...formData, price: e.target.value })
@@ -336,12 +339,12 @@ export default function EditProductModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-black text-gray-600 uppercase mb-2 ml-1 flex items-center gap-1">
-                    <MapPin size={14} /> Localização
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1 ml-1 flex items-center gap-1">
+                    <MapPin size={10} /> Local
                   </label>
                   <input
                     type="text"
-                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-xl font-black text-gray-700 uppercase text-base focus:border-red-500 outline-none"
+                    className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-gray-700 uppercase text-xs focus:border-red-500 outline-none"
                     value={formData.location}
                     onChange={(e) =>
                       setFormData({
@@ -355,26 +358,26 @@ export default function EditProductModal({
             </div>
 
             {/* 🔢 GRID DE ESTOQUE (PADRONIZADO) */}
-            <div className="grid grid-cols-3 gap-5 pt-2">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-gray-400 uppercase tracking-tighter ml-1">
+            <div className="grid grid-cols-3 gap-3 pt-2">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter ml-1">
                   SKU Master
                 </label>
                 <input
                   type="text"
-                  className="w-full py-4 bg-white border-2 border-dashed border-gray-200 rounded-xl font-mono text-base text-center font-black text-gray-400"
+                  className="w-full py-3 bg-white border border-dashed border-gray-300 rounded-xl font-mono text-xs text-center font-bold text-gray-500"
                   value={product.sku}
                   readOnly
                 />
               </div>
               <div>
-                <label className="block text-sm font-black text-gray-600 uppercase mb-2 text-center">
-                  Quantidade Atual
+                <label className="block text-[10px] font-black text-gray-600 uppercase mb-1 text-center">
+                  Qtd Atual
                 </label>
                 <input
                   required
                   type="number"
-                  className="w-full py-4 bg-gray-100 border-2 border-gray-200 rounded-xl font-black text-center text-2xl text-gray-900"
+                  className="w-full py-3 bg-gray-100 border border-gray-200 rounded-xl font-black text-center text-lg text-gray-900"
                   value={formData.quantity}
                   onChange={(e) =>
                     setFormData({ ...formData, quantity: e.target.value })
@@ -382,13 +385,13 @@ export default function EditProductModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-black text-red-500 uppercase mb-2 text-center">
-                  Mínimo Master
+                <label className="block text-[10px] font-black text-red-500 uppercase mb-1 text-center">
+                  Mínimo
                 </label>
                 <input
                   required
                   type="number"
-                  className="w-full py-4 bg-red-50 border-2 border-red-100 rounded-xl font-black text-center text-2xl text-red-600 focus:border-red-500 outline-none"
+                  className="w-full py-3 bg-red-50 border border-red-100 rounded-xl font-black text-center text-lg text-red-600 focus:border-red-500 outline-none"
                   value={formData.minStock}
                   onChange={(e) =>
                     setFormData({ ...formData, minStock: e.target.value })
@@ -399,16 +402,16 @@ export default function EditProductModal({
           </form>
         </div>
 
-        {/* FOOTER - Botão GIGANTE */}
-        <div className="p-8 border-t border-gray-100 bg-gray-50/50">
+        {/* FOOTER */}
+        <div className="p-6 border-t border-gray-100 bg-gray-50/50">
           <button
             type="submit"
             form="edit-product-form"
             disabled={loading}
-            className="w-full py-6 bg-red-600 hover:bg-red-700 text-white font-black rounded-[20px] shadow-2xl transition-all active:scale-[0.97] uppercase tracking-[0.2em] text-lg flex items-center justify-center gap-4"
+            className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl shadow-lg transition-all active:scale-[0.98] uppercase tracking-widest text-sm flex items-center justify-center gap-2"
           >
             {loading ? (
-              <Loader2 className="animate-spin" size={28} />
+              <Loader2 className="animate-spin" size={20} />
             ) : (
               "Salvar Alterações Master"
             )}
