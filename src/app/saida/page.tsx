@@ -95,23 +95,14 @@ export default function FastCheckoutPage() {
 
     setIsProcessing(true);
     try {
-      // 1. Tratamento blindado para o Fornecedor (Evita o erro de objeto nulo)
-      let supplierId = "";
-      if (scannedProduct.supplier) {
-        supplierId =
-          typeof scannedProduct.supplier === "object"
-            ? scannedProduct.supplier._id
-            : scannedProduct.supplier;
-      }
-
-      // 2. Montamos o pacote com dados garantidos
-      const payload = {
+      // 1. Montamos o pacote base
+      const payload: any = {
         _id: scannedProduct._id,
+        id: scannedProduct._id, // Mandamos com e sem underline para garantir que a API ache
         name: scannedProduct.name,
         sku: scannedProduct.sku || "",
         ean: scannedProduct.ean || "",
         category: scannedProduct.category || "GERAL",
-        supplier: supplierId,
         minStock: Number(scannedProduct.minStock || 15),
         price: Number(scannedProduct.price || 0),
         costPrice: Number(scannedProduct.costPrice || 0),
@@ -120,21 +111,37 @@ export default function FastCheckoutPage() {
         quantity: Number(scannedProduct.quantity) - removeQuantity,
       };
 
+      // 2. Tratamento Rigoroso do Fornecedor para evitar CastError no MongoDB
+      if (scannedProduct.supplier) {
+        payload.supplier =
+          typeof scannedProduct.supplier === "object"
+            ? scannedProduct.supplier._id
+            : scannedProduct.supplier;
+      } else {
+        payload.supplier = null; // O Banco aceita null, mas recusa "" (string vazia)
+      }
+
+      // 🚀 RASTREADOR: Imprime no console o que estamos enviando
+      console.log("📦 PAYLOAD ENVIADO PARA A API:", payload);
+
       const res = await fetch("/api/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      // 3. Leitura Segura de Erro (Evita o "Unexpected end of JSON")
+      // 3. Leitura Segura de Erro
       if (!res.ok) {
-        const errorText = await res.text(); // Lemos como texto primeiro
+        const errorText = await res.text();
+        // 🚀 RASTREADOR: Imprime o erro real que o servidor cuspiu
+        console.error("❌ ERRO REAL DO SERVIDOR:", errorText);
+
         let errorMessage = "Erro na comunicação com o banco de dados.";
         try {
           const errorObj = JSON.parse(errorText);
           errorMessage = errorObj.error || errorMessage;
         } catch (e) {
-          // Se não for JSON, apenas segue com a mensagem padrão
+          // Ignora erro de parse
         }
         throw new Error(errorMessage);
       }
