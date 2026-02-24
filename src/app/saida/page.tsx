@@ -228,7 +228,7 @@ export default function FastCheckoutPage() {
                     </span>
                   </button>
 
-                  {/* 👇 BOTÃO NINJA DE TESTE (Puxa o Produto 1 automaticamente) 👇 */}
+                  {/* 👇 BOTÃO NINJA DE TESTE (Puxa o Produto 1 automaticamente) 👇 
                   {products.length > 0 && (
                     <button
                       onClick={() => handleProductScanned(products[0]._id)}
@@ -236,7 +236,7 @@ export default function FastCheckoutPage() {
                     >
                       Simular Leitura do 1º Produto (DEV)
                     </button>
-                  )}
+                  )}*/}
                 </div>
               )}
             </div>
