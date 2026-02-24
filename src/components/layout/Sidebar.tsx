@@ -18,6 +18,8 @@ import {
   ArrowLeftRight,
   ShieldCheck,
   ShieldAlert,
+  Truck,
+  Zap,
 } from "lucide-react";
 
 import { useDashboard } from "@/providers/DashboardContext";
@@ -41,15 +43,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   }, [pathname]);
 
-  // 👇 NOVA FUNÇÃO DE LOGOUT "SECURE"
   const handleLogout = async () => {
     try {
-      // 1. Avisa o servidor que estamos saindo (registra no banco)
       await fetch("/api/auth/log-exit", { method: "POST" });
     } catch (error) {
       console.error("Erro silencioso ao registrar log de saída.");
     } finally {
-      // 2. Realiza o Logout visual e limpa os cookies (independente de erro na API)
       signOut({ callbackUrl: "/login" });
     }
   };
@@ -65,26 +64,25 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       : "SM";
   };
 
+  const userRole = (session?.user as any)?.role || "Membro";
+  const isAdmin = userRole === "admin";
+  const isSupreme = session?.user?.email === "admin@stockmaster.com";
+  const isLogActive = pathname.startsWith("/log");
+
+  // 👇 MENU 100% PADRONIZADO (Sem highlights)
   const menuItems = [
     { name: "Painel", href: "/", icon: LayoutDashboard },
-    { name: "Categorias", href: "/categorias", icon: Tag },
+    { name: "Saída Expressa", href: "/saida", icon: Zap },
     {
       name: "Gerencia de Estoque",
       href: "/inventory",
       icon: Search,
       badge: criticalCount,
     },
-    ...((session?.user as any)?.role === "admin"
-      ? [{ name: "Usuários", href: "/usuarios", icon: Users }]
-      : []),
+    { name: "Categorias", href: "/categorias", icon: Tag },
+    { name: "Fornecedores", href: "/fornecedores", icon: Truck },
+    ...(isAdmin ? [{ name: "Usuários", href: "/usuarios", icon: Users }] : []),
   ];
-
-  const userRole = (session?.user as any)?.role || "Membro";
-  const isAdmin = userRole === "admin";
-
-  const isSupreme = session?.user?.email === "admin@stockmaster.com";
-
-  const isLogActive = pathname.startsWith("/log");
 
   return (
     <>
@@ -137,7 +135,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   onClick={onClose}
                   className={`flex items-center justify-between p-3.5 rounded-xl transition-all group ${
                     isActive
-                      ? "bg-red-50 text-brand-red shadow-sm font-black"
+                      ? "bg-red-50 text-red-600 shadow-sm font-black"
                       : "text-gray-400 hover:bg-gray-50 hover:text-gray-900 font-bold"
                   }`}
                 >
@@ -146,7 +144,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       size={20}
                       className={
                         isActive
-                          ? "text-brand-red"
+                          ? "text-red-600"
                           : "text-gray-400 group-hover:text-gray-600"
                       }
                     />
@@ -267,9 +265,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </div>
               </div>
 
-              {/* 👇 BOTÃO DE SAIR ATUALIZADO */}
               <button
-                onClick={handleLogout} // ✅ Aqui chamamos a nova função
+                onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-100 hover:bg-red-50 transition-all font-bold text-xs uppercase tracking-wide shadow-sm"
               >
                 <LogOut size={14} />

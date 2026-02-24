@@ -19,6 +19,7 @@ import {
   Square,
   X,
   Truck,
+  Printer, // ✨ 1. ÍCONE DE IMPRESSORA ADICIONADO
 } from "lucide-react";
 
 // Componentes
@@ -27,6 +28,7 @@ import DeleteConfirmModal from "../../components/inventory/DeleteConfirmModal";
 import AddProductModal from "../../components/inventory/AddProductModal";
 import HistoryModal from "../../components/inventory/HistoryModal";
 import BatchDeleteModal from "../../components/inventory/BatchDeleteModal";
+import PrintLabelModal from "../../components/inventory/PrintLabelModal"; // ✨ 2. MODAL IMPORTADO
 import { DataDisplay } from "@/components/ui/DataDisplay";
 
 // Libs
@@ -42,7 +44,7 @@ export default function InventoryPage() {
   // Estados de Dados
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]); // ✨ NOVO: Estado de Fornecedores
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Estados de Filtro
@@ -52,6 +54,8 @@ export default function InventoryPage() {
   const [filterStatus, setFilterStatus] = useState<
     "ALL" | "STABLE" | "CRITICAL"
   >("ALL");
+
+  const [productToPrint, setProductToPrint] = useState<any>(null); // ✨ Já estava aqui, show!
 
   // Estado de Seleção em Massa
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -74,14 +78,14 @@ export default function InventoryPage() {
   const [historyMovements, setHistoryMovements] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // 1. Carregar Dados Iniciais (Agora busca Fornecedores também)
+  // 1. Carregar Dados Iniciais
   const fetchData = async () => {
     setLoading(true);
     try {
       const [prodRes, catRes, supRes] = await Promise.all([
         fetch("/api/products", { cache: "no-store" }),
         fetch("/api/categories", { cache: "no-store" }),
-        fetch("/api/suppliers", { cache: "no-store" }), // ✨ NOVO: Busca fornecedores
+        fetch("/api/suppliers", { cache: "no-store" }),
       ]);
 
       const prods = await prodRes.json();
@@ -90,7 +94,7 @@ export default function InventoryPage() {
 
       setProducts(Array.isArray(prods) ? prods : []);
       setCategories(Array.isArray(cats) ? cats : []);
-      setSuppliers(Array.isArray(sups) ? sups : []); // ✨ NOVO
+      setSuppliers(Array.isArray(sups) ? sups : []);
 
       setSelectedIds([]);
     } catch (error) {
@@ -122,12 +126,10 @@ export default function InventoryPage() {
 
   // --- LÓGICA DE FILTRAGEM ---
   const filteredProducts = products.filter((p) => {
-    // 1. Filtro de Texto
     const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // 2. Filtro de Categoria
     const productCat = p.category
       ? p.category.toString().trim().toLowerCase()
       : "";
@@ -135,8 +137,6 @@ export default function InventoryPage() {
     const matchesCategory =
       selectedCategory === "TODAS" || productCat === selectedCat;
 
-    // 3. Filtro de Status
-    // Usa a lógica híbrida (minStock antigo ou minQuantity novo)
     const minQty = Number(p.minStock || p.minQuantity || 15);
     let matchesStatus = true;
 
@@ -251,7 +251,6 @@ export default function InventoryPage() {
     const brandDark: [number, number, number] = [17, 24, 39];
     const brandGray: [number, number, number] = [107, 114, 128];
 
-    // Cabeçalho
     doc.setFillColor(...brandRed);
     doc.roundedRect(14, 15, 12, 12, 2, 2, "F");
     doc.setTextColor(255, 255, 255);
@@ -282,7 +281,6 @@ export default function InventoryPage() {
       { align: "right" },
     );
 
-    // Tabela
     const tableData = filteredProducts.map((p) => [
       p.sku.toUpperCase(),
       p.name,
@@ -321,16 +319,13 @@ export default function InventoryPage() {
   const countStable = products.length - countCritical;
 
   const getSupplierName = (supplierVal: any) => {
-    // Se não tiver valor, retorna traço
     if (!supplierVal)
       return <span className="text-gray-300 text-[10px]">-</span>;
 
-    // CASO 1: O backend mandou o objeto completo (ex: { _id: "...", name: "Dell" })
     if (typeof supplierVal === "object" && supplierVal.name) {
       return supplierVal.name;
     }
 
-    // CASO 2: O backend mandou só o ID (string). Procuramos na lista 'suppliers' que carregamos.
     if (Array.isArray(suppliers)) {
       const found = suppliers.find((s) => s._id === supplierVal);
       if (found) return found.name;
@@ -397,7 +392,6 @@ export default function InventoryPage() {
         </div>
       ),
     },
-    // 💰 COLUNA DE CUSTO (NOVA)
     {
       header: "Custo",
       accessorKey: "costPrice" as keyof any,
@@ -410,7 +404,6 @@ export default function InventoryPage() {
         </div>
       ),
     },
-    // 💰 COLUNA DE VENDA (ATUALIZADA)
     {
       header: "Venda",
       accessorKey: "price" as keyof any,
@@ -443,6 +436,20 @@ export default function InventoryPage() {
           </div>
         );
       },
+    },
+    // ✨ 3. COLUNA DE ETIQUETA ADICIONADA AQUI
+    {
+      header: "Etiqueta",
+      accessorKey: "_id" as keyof any,
+      cell: (item: any) => (
+        <button
+          onClick={() => setProductToPrint(item)}
+          className="p-2 hover:bg-gray-100 text-gray-400 hover:text-gray-900 rounded-xl transition-all"
+          title="Imprimir Etiqueta"
+        >
+          <Printer size={18} />
+        </button>
+      ),
     },
     {
       header: "Histórico",
@@ -702,6 +709,14 @@ export default function InventoryPage() {
         count={selectedIds.length}
         isDeleting={isBatchDeleting}
       />
+
+      {/* ✨ 4. MODAL DE IMPRESSÃO AQUI NO FINAL */}
+      {productToPrint && (
+        <PrintLabelModal
+          product={productToPrint}
+          onClose={() => setProductToPrint(null)}
+        />
+      )}
     </div>
   );
 }
