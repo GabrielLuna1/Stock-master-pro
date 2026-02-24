@@ -95,34 +95,24 @@ export default function FastCheckoutPage() {
 
     setIsProcessing(true);
     try {
-      // 1. Montamos o pacote base
-      const payload: any = {
+      // 1. Montamos o payload EXATAMENTE como o Modal de Edição faz
+      const payload = {
         _id: scannedProduct._id,
-        id: scannedProduct._id, // Mandamos com e sem underline para garantir que a API ache
         name: scannedProduct.name,
         sku: scannedProduct.sku || "",
         ean: scannedProduct.ean || "",
         category: scannedProduct.category || "GERAL",
-        minStock: Number(scannedProduct.minStock || 15),
+        location: scannedProduct.location || "ALMOXARIFADO",
+        quantity: Number(scannedProduct.quantity) - removeQuantity, // A mágica da baixa aqui
+        minStock: Number(scannedProduct.minStock || 0),
         price: Number(scannedProduct.price || 0),
         costPrice: Number(scannedProduct.costPrice || 0),
-        location: scannedProduct.location || "ALMOXARIFADO",
-        // A mágica da baixa:
-        quantity: Number(scannedProduct.quantity) - removeQuantity,
+        // Tratamento do supplier para não enviar objeto inteiro
+        supplier:
+          scannedProduct.supplier?._id || scannedProduct.supplier || null,
       };
 
-      // 2. Tratamento Rigoroso do Fornecedor para evitar CastError no MongoDB
-      if (scannedProduct.supplier) {
-        payload.supplier =
-          typeof scannedProduct.supplier === "object"
-            ? scannedProduct.supplier._id
-            : scannedProduct.supplier;
-      } else {
-        payload.supplier = null; // O Banco aceita null, mas recusa "" (string vazia)
-      }
-
-      // 🚀 RASTREADOR: Imprime no console o que estamos enviando
-      console.log("📦 PAYLOAD ENVIADO PARA A API:", payload);
+      console.log("🚀 Enviando baixa de estoque:", payload);
 
       const res = await fetch("/api/products", {
         method: "PUT",
@@ -130,25 +120,18 @@ export default function FastCheckoutPage() {
         body: JSON.stringify(payload),
       });
 
-      // 3. Leitura Segura de Erro
       if (!res.ok) {
         const errorText = await res.text();
-        // 🚀 RASTREADOR: Imprime o erro real que o servidor cuspiu
-        console.error("❌ ERRO REAL DO SERVIDOR:", errorText);
-
-        let errorMessage = "Erro na comunicação com o banco de dados.";
-        try {
-          const errorObj = JSON.parse(errorText);
-          errorMessage = errorObj.error || errorMessage;
-        } catch (e) {
-          // Ignora erro de parse
-        }
-        throw new Error(errorMessage);
+        console.error("❌ Erro na API:", errorText);
+        throw new Error(errorText || "Erro ao atualizar banco de dados.");
       }
 
-      toast.success(`${removeQuantity}x ${scannedProduct.name} retirado!`);
+      // SUCESSO!
+      toast.success(
+        `${removeQuantity}x ${scannedProduct.name} retirado com sucesso!`,
+      );
 
-      // Atualiza a tela instantaneamente
+      // Atualiza a lista local para o próximo scan já vir com o número novo
       setProducts((prev) =>
         prev.map((p) =>
           p._id === scannedProduct._id
@@ -157,11 +140,12 @@ export default function FastCheckoutPage() {
         ),
       );
 
-      setScannedProduct(null);
-      startScanner();
+      setScannedProduct(null); // Fecha o card do produto
+      // Se não estiver no PC (onde o scanner não liga), volta a escanear
+      if (isScanning) startScanner();
     } catch (error: any) {
-      toast.error(error.message || "Falha ao registrar saída.");
       console.error("Erro no checkout:", error);
+      toast.error(error.message || "Falha ao registrar saída.");
     } finally {
       setIsProcessing(false);
     }
@@ -231,17 +215,29 @@ export default function FastCheckoutPage() {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={startScanner}
-                  className="group flex flex-col items-center justify-center gap-4 w-full max-w-sm aspect-square bg-white border-2 border-dashed border-gray-300 rounded-3xl hover:border-red-500 hover:bg-red-50 transition-all cursor-pointer"
-                >
-                  <div className="bg-red-100 p-6 rounded-full text-red-600 group-hover:scale-110 transition-transform shadow-inner">
-                    <Barcode size={48} />
-                  </div>
-                  <span className="font-black text-gray-600 uppercase tracking-widest text-sm group-hover:text-red-600">
-                    Ativar Leitor
-                  </span>
-                </button>
+                <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+                  <button
+                    onClick={startScanner}
+                    className="group flex flex-col items-center justify-center gap-4 w-full aspect-square bg-white border-2 border-dashed border-gray-300 rounded-3xl hover:border-red-500 hover:bg-red-50 transition-all cursor-pointer"
+                  >
+                    <div className="bg-red-100 p-6 rounded-full text-red-600 group-hover:scale-110 transition-transform shadow-inner">
+                      <Barcode size={48} />
+                    </div>
+                    <span className="font-black text-gray-600 uppercase tracking-widest text-sm group-hover:text-red-600">
+                      Ativar Leitor
+                    </span>
+                  </button>
+
+                  {/* 👇 BOTÃO NINJA DE TESTE (Puxa o Produto 1 automaticamente) 👇 */}
+                  {products.length > 0 && (
+                    <button
+                      onClick={() => handleProductScanned(products[0]._id)}
+                      className="mt-2 text-[10px] font-bold text-gray-400 underline hover:text-red-500"
+                    >
+                      Simular Leitura do 1º Produto (DEV)
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
