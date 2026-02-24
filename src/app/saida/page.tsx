@@ -95,23 +95,28 @@ export default function FastCheckoutPage() {
 
     setIsProcessing(true);
     try {
-      // 👇 O SEGREDO ESTÁ AQUI: Formatamos o "pacote" exatamente como o Banco de Dados gosta
+      // 1. Tratamento blindado para o Fornecedor (Evita o erro de objeto nulo)
+      let supplierId = "";
+      if (scannedProduct.supplier) {
+        supplierId =
+          typeof scannedProduct.supplier === "object"
+            ? scannedProduct.supplier._id
+            : scannedProduct.supplier;
+      }
+
+      // 2. Montamos o pacote com dados garantidos
       const payload = {
         _id: scannedProduct._id,
         name: scannedProduct.name,
-        sku: scannedProduct.sku,
-        ean: scannedProduct.ean,
-        category: scannedProduct.category,
-        // Se o fornecedor vier "gordo" (objeto), pegamos só o _id. Se não, mandamos normal.
-        supplier:
-          typeof scannedProduct.supplier === "object"
-            ? scannedProduct.supplier?._id
-            : scannedProduct.supplier,
+        sku: scannedProduct.sku || "",
+        ean: scannedProduct.ean || "",
+        category: scannedProduct.category || "GERAL",
+        supplier: supplierId,
         minStock: Number(scannedProduct.minStock || 15),
         price: Number(scannedProduct.price || 0),
         costPrice: Number(scannedProduct.costPrice || 0),
-        location: scannedProduct.location,
-        // A mágica acontece aqui:
+        location: scannedProduct.location || "ALMOXARIFADO",
+        // A mágica da baixa:
         quantity: Number(scannedProduct.quantity) - removeQuantity,
       };
 
@@ -121,19 +126,26 @@ export default function FastCheckoutPage() {
         body: JSON.stringify(payload),
       });
 
-      // Pegamos o erro real do banco se der problema
+      // 3. Leitura Segura de Erro (Evita o "Unexpected end of JSON")
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Erro na baixa do banco de dados.");
+        const errorText = await res.text(); // Lemos como texto primeiro
+        let errorMessage = "Erro na comunicação com o banco de dados.";
+        try {
+          const errorObj = JSON.parse(errorText);
+          errorMessage = errorObj.error || errorMessage;
+        } catch (e) {
+          // Se não for JSON, apenas segue com a mensagem padrão
+        }
+        throw new Error(errorMessage);
       }
 
       toast.success(`${removeQuantity}x ${scannedProduct.name} retirado!`);
 
-      // Atualiza a tela na mesma hora sem precisar recarregar
+      // Atualiza a tela instantaneamente
       setProducts((prev) =>
         prev.map((p) =>
           p._id === scannedProduct._id
-            ? { ...p, quantity: p.quantity - removeQuantity }
+            ? { ...p, quantity: payload.quantity }
             : p,
         ),
       );
