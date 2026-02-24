@@ -95,19 +95,41 @@ export default function FastCheckoutPage() {
 
     setIsProcessing(true);
     try {
+      // 👇 O SEGREDO ESTÁ AQUI: Formatamos o "pacote" exatamente como o Banco de Dados gosta
+      const payload = {
+        _id: scannedProduct._id,
+        name: scannedProduct.name,
+        sku: scannedProduct.sku,
+        ean: scannedProduct.ean,
+        category: scannedProduct.category,
+        // Se o fornecedor vier "gordo" (objeto), pegamos só o _id. Se não, mandamos normal.
+        supplier:
+          typeof scannedProduct.supplier === "object"
+            ? scannedProduct.supplier?._id
+            : scannedProduct.supplier,
+        minStock: Number(scannedProduct.minStock || 15),
+        price: Number(scannedProduct.price || 0),
+        costPrice: Number(scannedProduct.costPrice || 0),
+        location: scannedProduct.location,
+        // A mágica acontece aqui:
+        quantity: Number(scannedProduct.quantity) - removeQuantity,
+      };
+
       const res = await fetch("/api/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...scannedProduct,
-          quantity: Number(scannedProduct.quantity) - removeQuantity,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Erro na baixa");
+      // Pegamos o erro real do banco se der problema
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Erro na baixa do banco de dados.");
+      }
 
       toast.success(`${removeQuantity}x ${scannedProduct.name} retirado!`);
 
+      // Atualiza a tela na mesma hora sem precisar recarregar
       setProducts((prev) =>
         prev.map((p) =>
           p._id === scannedProduct._id
@@ -118,8 +140,9 @@ export default function FastCheckoutPage() {
 
       setScannedProduct(null);
       startScanner();
-    } catch (error) {
-      toast.error("Falha ao registrar saída.");
+    } catch (error: any) {
+      toast.error(error.message || "Falha ao registrar saída.");
+      console.error("Erro no checkout:", error);
     } finally {
       setIsProcessing(false);
     }
