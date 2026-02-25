@@ -21,7 +21,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   // 🛡️ TRAVA DE SEGURANÇA
-  if (pathname === "/login") {
+  const isAuthPage =
+    pathname === "/login" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password";
+
+  // 🛡️ TRAVA DE SEGURANÇA
+  if (isAuthPage) {
     return <>{children}</>;
   }
 

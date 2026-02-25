@@ -1,13 +1,15 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import bcrypt from "bcryptjs";
 
-// 1. Definição dos Dados
+// 1. Definição dos Dados ()
 export interface IUser {
   name: string;
   email: string;
   password: string;
   role: "admin" | "operador";
   active: boolean;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
 }
 
 // 2. Definição dos Métodos Customizados
@@ -37,27 +39,33 @@ const UserSchema = new Schema<UserDocument, UserModel, IUserMethods>(
       enum: ["admin", "operador"],
       default: "operador",
     },
+
+    resetPasswordToken: {
+      type: String,
+      required: false,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      required: false,
+    },
     active: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // 🔒 CRIPTOGRAFIA (Pre-save)
-// ⚠️ CORREÇÃO: Removemos o parâmetro 'next'.
-// Se é async, o Mongoose espera o código terminar sozinho.
 UserSchema.pre("save", async function () {
-  const user = this as any; // Mantemos o hack do 'any' para o TS não reclamar
+  const user = this as any;
 
   if (!user.isModified("password")) {
-    return; // Apenas retorna, sem chamar next()
+    return;
   }
 
   try {
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(user.password, salt);
-    // Acabou aqui. O Mongoose entende que o async terminou.
   } catch (error) {
-    throw new Error(error as string); // Se der erro, lançamos um throw
+    throw new Error(error as string);
   }
 });
 

@@ -30,6 +30,7 @@ import HistoryModal from "../../components/inventory/HistoryModal";
 import BatchDeleteModal from "../../components/inventory/BatchDeleteModal";
 import PrintLabelModal from "../../components/inventory/PrintLabelModal"; // ✨ 2. MODAL IMPORTADO
 import { DataDisplay } from "@/components/ui/DataDisplay";
+import ImportCSVButton from "@/components/inventory/ImportCSVButton";
 
 // Libs
 import jsPDF from "jspdf";
@@ -499,6 +500,7 @@ export default function InventoryPage() {
             <Plus size={20} />{" "}
             <span className="hidden md:inline">ADICIONAR ITEM</span>
           </button>
+          <ImportCSVButton />
         </div>
       </header>
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link"; // 👈 1. Import do Link adicionado
 import { Loader2, Lock, Mail, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
@@ -81,7 +82,7 @@ export default function LoginPage() {
                   type="email"
                   required
                   className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/10 focus:border-brand-red outline-none font-bold text-gray-900 transition-all"
-                  placeholder="admin@stockmaster.com"
+                  placeholder="seu.nome@empresa.com.br"
                   value={data.email}
                   onChange={(e) => setData({ ...data, email: e.target.value })}
                 />
@@ -107,6 +108,16 @@ export default function LoginPage() {
                     setData({ ...data, password: e.target.value })
                   }
                 />
+              </div>
+
+              {/* 👇 2. Link de Esqueci a Senha adicionado aqui */}
+              <div className="flex justify-end pt-1">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-bold text-gray-400 hover:text-brand-red transition-colors"
+                >
+                  Esqueceu sua senha?
+                </Link>
               </div>
             </div>
 
