@@ -257,16 +257,16 @@ export default function CategoriasPage() {
           {/* LISTA */}
           <div className="lg:col-span-8 flex flex-col h-full order-2">
             {/* Barra de Pesquisa */}
-            <div className="bg-white p-2 rounded-2xl border border-gray-100 shadow-sm mb-6 flex items-center sticky top-0 z-20">
+            <div className="bg-white p-1.5 rounded-2xl border-2 border-gray-200 shadow-sm mb-6 flex items-center sticky top-0 z-20 focus-within:border-brand-red focus-within:shadow-md transition-all group">
               <div className="relative w-full">
                 <Search
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                  size={18}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand-red transition-colors"
+                  size={20}
                 />
                 <input
                   type="text"
                   placeholder="Pesquisar categoria..."
-                  className="w-full pl-11 pr-4 py-3 bg-white outline-none font-bold text-gray-600 placeholder:text-gray-300 rounded-xl"
+                  className="w-full pl-12 pr-4 py-3 bg-transparent outline-none font-bold text-gray-900 placeholder:text-gray-400 rounded-xl text-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -304,7 +304,7 @@ export default function CategoriasPage() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <div className="flex gap-2">
                         <button
                           onClick={() => startEdit(cat)}
                           className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-all active:scale-95"
@@ -332,19 +332,19 @@ export default function CategoriasPage() {
 
                 {/* PAGINAÇÃO */}
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-8 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
                     <button
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
-                      className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wide text-gray-600 bg-white border border-gray-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95"
+                      className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wide text-gray-900 bg-white border-2 border-gray-300 hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95"
                     >
                       <ChevronLeft size={16} />{" "}
                       <span className="hidden sm:inline">Anterior</span>
                     </button>
 
-                    <span className="text-xs font-black text-gray-300 uppercase tracking-widest bg-gray-50 px-3 py-1 rounded-lg">
+                    <span className="text-xs font-black text-gray-400 uppercase tracking-widest bg-gray-100 px-4 py-2 rounded-xl border border-gray-200">
                       Página{" "}
-                      <span className="text-brand-red text-sm">
+                      <span className="text-brand-red text-sm mx-1">
                         {currentPage}
                       </span>{" "}
                       / {totalPages}
@@ -355,7 +355,7 @@ export default function CategoriasPage() {
                         setCurrentPage((p) => Math.min(totalPages, p + 1))
                       }
                       disabled={currentPage === totalPages}
-                      className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wide text-gray-600 bg-white border border-gray-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95"
+                      className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wide text-gray-900 bg-white border-2 border-gray-300 hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95"
                     >
                       <span className="hidden sm:inline">Próxima</span>{" "}
                       <ChevronRight size={16} />

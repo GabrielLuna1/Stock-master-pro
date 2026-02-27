@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react"; // 👈 1. Importação da Sessão adicionada
 import {
   Plus,
   Search,
@@ -12,6 +13,7 @@ import {
   Trash2,
   X,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +28,10 @@ interface Supplier {
 }
 
 export default function SuppliersPage() {
+  // 👈 2. Pegando os dados do usuário logado
+  const { data: session } = useSession();
+  const amIAdmin = (session?.user as any)?.role === "admin";
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -33,6 +39,12 @@ export default function SuppliersPage() {
   // Modal e Edição
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+
+  // Estados para o Modal de Exclusão
+  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(
+    null,
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Estados do Formulário
   const [formData, setFormData] = useState({
@@ -72,7 +84,7 @@ export default function SuppliersPage() {
     fetchSuppliers();
   }, []);
 
-  // 2. MÁSCARAS DE INPUT (CNPJ & TELEFONE) 🛡️
+  // 2. MÁSCARAS DE INPUT (CNPJ & TELEFONE)
   const handleCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, ""); // Remove tudo que não é número
 
@@ -140,7 +152,7 @@ export default function SuppliersPage() {
     }
   }, [addressData.cep]);
 
-  // 4. ABRIR MODAL (COM PARSER DE ENDEREÇO) 🧠
+  // 4. ABRIR MODAL (COM PARSER DE ENDEREÇO)
   const handleOpenModal = (supplier?: Supplier) => {
     if (supplier) {
       setEditingSupplier(supplier);
@@ -183,8 +195,6 @@ export default function SuppliersPage() {
             parsedAddress.state = state || "";
 
             // 3. Separa Rua e Número
-            // Remove o bairro e cidade da string para sobrar só "Rua X, 123"
-            // Isso é mais seguro do que pegar index fixo caso o nome da rua tenha hifens
             const streetNumPart = parts.slice(0, parts.length - 2).join(" - ");
 
             const lastCommaIndex = streetNumPart.lastIndexOf(",");
@@ -242,7 +252,6 @@ export default function SuppliersPage() {
     }
 
     // Monta o endereço completo para salvar
-    // Padronizamos com separadores " - " para facilitar o parser depois
     const fullAddress = addressData.cep
       ? `${addressData.street}, ${addressData.number} - ${addressData.neighborhood} - ${addressData.city}/${addressData.state} - CEP: ${addressData.cep}`
       : addressData.street;
@@ -275,19 +284,26 @@ export default function SuppliersPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este parceiro?")) return;
+  // NOVA FUNÇÃO DE EXCLUSÃO
+  const executeDelete = async () => {
+    if (!supplierToDelete) return;
+    setIsDeleting(true);
     try {
-      const res = await fetch(`/api/suppliers?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/suppliers?id=${supplierToDelete._id}`, {
+        method: "DELETE",
+      });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error);
+        toast.error(data.error); // Vai mostrar o erro do Safe Delete se houver
+        setIsDeleting(false);
         return;
       }
-      toast.success("Fornecedor excluído.");
-      fetchSuppliers();
+      toast.success("Fornecedor excluído com sucesso.");
+      setSupplierToDelete(null); // Fecha o modal
+      fetchSuppliers(); // Atualiza a lista
     } catch (error) {
       toast.error("Erro ao excluir.");
+      setIsDeleting(false);
     }
   };
 
@@ -350,20 +366,27 @@ export default function SuppliersPage() {
               key={supplier._id}
               className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group relative"
             >
-              <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute top-4 right-4 flex gap-2">
                 <button
                   onClick={() => handleOpenModal(supplier)}
                   className="p-2 bg-gray-50 hover:bg-blue-50 text-gray-400 hover:text-blue-600 rounded-xl transition-colors"
+                  title="Editar Parceiro"
                 >
                   <Edit size={16} />
                 </button>
-                <button
-                  onClick={() => handleDelete(supplier._id)}
-                  className="p-2 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
+
+                {/* 👈 3. TRAVA DE SEGURANÇA: Só Admin vê o botão de excluir */}
+                {amIAdmin && (
+                  <button
+                    onClick={() => setSupplierToDelete(supplier)}
+                    className="p-2 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
+                    title="Excluir Parceiro"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
+
               <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-red-600 font-bold text-lg">
                   {supplier.name.charAt(0).toUpperCase()}
@@ -402,9 +425,9 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      {/* MODAL PADRONIZADO */}
+      {/* MODAL PADRONIZADO (CADASTRO/EDIÇÃO) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             {/* Header */}
             <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-start bg-gray-50/30">
@@ -443,7 +466,7 @@ export default function SuppliersPage() {
                 />
               </div>
 
-              {/* Razão Social + CNPJ (COM MÁSCARA) */}
+              {/* Razão Social + CNPJ */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-wide">
@@ -471,12 +494,12 @@ export default function SuppliersPage() {
                     maxLength={18}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 transition-all text-sm font-medium text-gray-900"
                     value={formData.cnpj}
-                    onChange={handleCnpjChange} // 👈 MÁSCARA AQUI
+                    onChange={handleCnpjChange}
                   />
                 </div>
               </div>
 
-              {/* Contato (COM MÁSCARA NO TELEFONE) */}
+              {/* Contato */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-wide">
@@ -501,7 +524,7 @@ export default function SuppliersPage() {
                     maxLength={15}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 transition-all text-sm font-medium text-gray-900"
                     value={formData.phone}
-                    onChange={handlePhoneChange} // 👈 MÁSCARA AQUI
+                    onChange={handlePhoneChange}
                   />
                 </div>
               </div>
@@ -617,6 +640,51 @@ export default function SuppliersPage() {
                 {editingSupplier ? "Salvar Alterações" : "Cadastrar Parceiro"}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {supplierToDelete && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} className="text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-gray-900 mb-2">
+                Excluir Parceiro?
+              </h3>
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                Você está prestes a excluir o fornecedor <br />
+                <span className="font-bold text-gray-900">
+                  {supplierToDelete.name}
+                </span>
+                .<br />
+                Esta ação é irreversível.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSupplierToDelete(null)}
+                  disabled={isDeleting}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors text-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={executeDelete}
+                  disabled={isDeleting}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-200"
+                >
+                  {isDeleting ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    "Excluir"
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
