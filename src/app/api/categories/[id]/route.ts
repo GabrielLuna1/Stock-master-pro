@@ -7,7 +7,7 @@ import SystemLog from "@/models/SystemLog";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// 📝 PUT: EDITAR CATEGORIA (Com Auditoria)
+// 📝 PUT: EDITAR CATEGORIA (Com Auditoria e Update em Cascata)
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -25,26 +25,50 @@ export async function PUT(
     // ⚡️ Mantendo sua correção mágica do Next.js 15
     const { id } = await params;
 
+    // ✨ PASSO 1 DA CASCATA: Descobrir o nome antigo ANTES de atualizar
+    const oldCategory = await Category.findById(id);
+    if (!oldCategory) {
+      return NextResponse.json(
+        { error: "Categoria não encontrada" },
+        { status: 404 },
+      );
+    }
+    const oldName = oldCategory.name;
+
+    // Prepara os dados novos
     const { name, color } = await req.json();
-    const slug = name
+    const newName = name.trim();
+    const slug = newName
       .toLowerCase()
-      .trim()
       .replace(/\s+/g, "-")
       .replace(/[^\w-]+/g, "");
 
+    // Atualiza a Categoria na tabela dela
     const updated = await Category.findByIdAndUpdate(
       id,
-      { name: name.trim(), color, slug },
+      { name: newName, color, slug },
       { new: true, runValidators: true },
     );
 
     if (!updated)
-      return NextResponse.json({ error: "ID não encontrado" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Erro ao atualizar categoria" },
+        { status: 500 },
+      );
 
-    // 🕵️‍♂️ 2. O ESPIÃO: Grava Log de Edição
+    // ✨ PASSO 2 DA CASCATA: A Mágica Acontece Aqui!
+    // Se o usuário mudou o nome da categoria, avisa todos os produtos!
+    if (oldName !== newName) {
+      await Product.updateMany(
+        { category: oldName }, // Busca quem tinha o nome velho
+        { $set: { category: newName } }, // Substitui pelo nome novo
+      );
+    }
+
+    // 🕵️‍♂️ O ESPIÃO: Grava Log de Edição
     await SystemLog.create({
       action: "CATEGORY_UPDATE",
-      description: `Editou categoria: ${updated.name}`,
+      description: `Editou categoria: De '${oldName}' para '${newName}'`,
       userId: user.id || user.email,
       userName: user.name,
       level: "info",

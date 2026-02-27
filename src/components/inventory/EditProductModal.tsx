@@ -37,10 +37,11 @@ export default function EditProductModal({
 
   const [formData, setFormData] = useState({
     name: "",
+    sku: "", // 👈 1. SKU ADICIONADO AQUI
     ean: "",
     category: "",
     supplier: "",
-    quantity: "", // Mantemos para visualização/ajuste rápido
+    quantity: "",
     minStock: "15",
     price: "",
     costPrice: "",
@@ -51,6 +52,7 @@ export default function EditProductModal({
     if (product) {
       setFormData({
         name: product.name || "",
+        sku: product.sku || "", // 👈 2. SKU PUXADO DO BANCO AQUI
         ean: product.ean || "",
         category: product.category || "",
         supplier:
@@ -363,11 +365,18 @@ export default function EditProductModal({
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter ml-1">
                   SKU Master
                 </label>
+                {/* 👈 3. INPUT DE SKU LIBERADO AQUI */}
                 <input
                   type="text"
-                  className="w-full py-3 bg-white border border-dashed border-gray-300 rounded-xl font-mono text-xs text-center font-bold text-gray-500"
-                  value={product.sku}
-                  readOnly
+                  className="w-full py-3 bg-white border border-dashed border-gray-300 rounded-xl font-mono text-xs text-center font-bold text-gray-900 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all uppercase"
+                  value={formData.sku}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      sku: e.target.value.toUpperCase(),
+                    })
+                  }
+                  placeholder="Digite o SKU"
                 />
               </div>
               <div>
