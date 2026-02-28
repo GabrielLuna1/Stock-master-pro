@@ -37,7 +37,7 @@ export default function EditProductModal({
 
   const [formData, setFormData] = useState({
     name: "",
-    sku: "", // 👈 1. SKU ADICIONADO AQUI
+    sku: "",
     ean: "",
     category: "",
     supplier: "",
@@ -52,7 +52,7 @@ export default function EditProductModal({
     if (product) {
       setFormData({
         name: product.name || "",
-        sku: product.sku || "", // 👈 2. SKU PUXADO DO BANCO AQUI
+        sku: product.sku || "",
         ean: product.ean || "",
         category: product.category || "",
         supplier:
@@ -68,7 +68,7 @@ export default function EditProductModal({
     }
   }, [product]);
 
-  // Lógica do Scanner (Igual ao Cadastro)
+  // Lógica do Scanner
   const startScanner = async () => {
     setIsScanning(true);
     setTimeout(async () => {
@@ -131,24 +131,49 @@ export default function EditProductModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     try {
-      const res = await fetch("/api/products", {
+      // 1. Pegamos o ID isolado para colocar na URL
+      const productId = product._id || product.id;
+
+      if (!productId) {
+        throw new Error("Erro Crítico: ID do produto não encontrado.");
+      }
+
+      // 2. Montamos o pacote SEM O _id (o MongoDB bloqueia edições se o _id estiver no pacote)
+      const payload: any = {
+        ...formData,
+        quantity: Number(formData.quantity) || 0,
+        minStock: Number(formData.minStock) || 0,
+        price: Number(formData.price) || 0,
+        costPrice: Number(formData.costPrice) || 0,
+      };
+
+      // ✨ FILTRO SALVA-VIDAS
+      if (!payload.ean || String(payload.ean).trim() === "") {
+        delete payload.ean;
+      }
+      if (!payload.supplier || String(payload.supplier).trim() === "") {
+        delete payload.supplier;
+      }
+
+      // 🎯 3. O TIRO CERTO: Apontamos para a API rica (manage-product) com o ID na URL
+      const res = await fetch(`/api/manage-product?id=${productId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          _id: product._id,
-          ...formData,
-          quantity: Number(formData.quantity),
-          minStock: Number(formData.minStock),
-          price: Number(formData.price),
-          costPrice: Number(formData.costPrice),
-        }),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Erro ao atualizar");
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Erro ao atualizar produto");
+      }
+
       toast.success("Alterações Master salvas!");
       onRefresh();
       onClose();
     } catch (error: any) {
+      console.error("🚨 Erro detectado:", error);
       toast.error(error.message);
     } finally {
       setLoading(false);
@@ -365,7 +390,6 @@ export default function EditProductModal({
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-tighter ml-1">
                   SKU Master
                 </label>
-                {/* 👈 3. INPUT DE SKU LIBERADO AQUI */}
                 <input
                   type="text"
                   className="w-full py-3 bg-white border border-dashed border-gray-300 rounded-xl font-mono text-xs text-center font-bold text-gray-900 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all uppercase"
