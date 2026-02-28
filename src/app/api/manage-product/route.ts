@@ -54,14 +54,27 @@ export async function PUT(request: Request) {
       });
     }
 
-    // 4. Atualiza o Produto
-    const updatedProduct = await Product.findByIdAndUpdate(
-      id,
-      { ...data, lastModifiedBy: user.id },
-      { new: true },
-    );
+    // ✨ 4. O FILTRO BLINDADO GLOBAL (A VACINA) ✨
+    // Limpa strings vazias no EAN e no Fornecedor para não dar o erro E11000 no MongoDB
+    const updatePayload = { ...data, lastModifiedBy: user.id };
 
-    // 5. Auditoria (Mantida)
+    if (!updatePayload.ean || String(updatePayload.ean).trim() === "") {
+      delete updatePayload.ean;
+    }
+
+    if (
+      !updatePayload.supplier ||
+      String(updatePayload.supplier).trim() === ""
+    ) {
+      delete updatePayload.supplier;
+    }
+
+    // 5. Atualiza o Produto (Enviando o pacote blindado)
+    const updatedProduct = await Product.findByIdAndUpdate(id, updatePayload, {
+      new: true,
+    });
+
+    // 6. Auditoria (Mantida)
     await SystemLog.create({
       action: "PRODUCT_UPDATE",
       description: `Editou produto: ${updatedProduct.name}. Estoque: ${oldQty} -> ${newQty}`,
