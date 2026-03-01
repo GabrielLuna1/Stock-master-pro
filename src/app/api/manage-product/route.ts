@@ -32,7 +32,6 @@ export async function PUT(request: Request) {
       );
 
     // 2. 🧮 Calcula a Diferença de Estoque
-    // Se não vier quantidade no payload, assume que não mudou (usa a antiga)
     const newQty =
       data.quantity !== undefined
         ? Number(data.quantity)
@@ -54,25 +53,46 @@ export async function PUT(request: Request) {
       });
     }
 
-    // ✨ 4. O FILTRO BLINDADO GLOBAL (A VACINA) ✨
-    // Limpa strings vazias no EAN e no Fornecedor para não dar o erro E11000 no MongoDB
-    const updatePayload = { ...data, lastModifiedBy: user.id };
+    // ✨ 4. O MODO TANQUE DE GUERRA ($set e $unset) ✨
+    const setPayload = { ...data, lastModifiedBy: user.id };
+    const unsetPayload: any = {};
 
-    if (!updatePayload.ean || String(updatePayload.ean).trim() === "") {
-      delete updatePayload.ean;
-    }
+    // Removemos os IDs do pacote para o banco não dar erro de "Immutable field"
+    delete setPayload._id;
+    delete setPayload.id;
 
+    // Se o EAN vier vazio, removemos do "set" e mandamos o banco DESTRUIR com "unset"
     if (
-      !updatePayload.supplier ||
-      String(updatePayload.supplier).trim() === ""
+      setPayload.hasOwnProperty("ean") &&
+      (!setPayload.ean || String(setPayload.ean).trim() === "")
     ) {
-      delete updatePayload.supplier;
+      delete setPayload.ean;
+      unsetPayload.ean = 1; // 1 significa "verdadeiro, destrua esse campo"
     }
 
-    // 5. Atualiza o Produto (Enviando o pacote blindado)
-    const updatedProduct = await Product.findByIdAndUpdate(id, updatePayload, {
-      new: true,
-    });
+    // Mesma coisa para o fornecedor
+    if (
+      setPayload.hasOwnProperty("supplier") &&
+      (!setPayload.supplier || String(setPayload.supplier).trim() === "")
+    ) {
+      delete setPayload.supplier;
+      unsetPayload.supplier = 1;
+    }
+
+    // Montamos a operação cirúrgica
+    const updateOperation: any = { $set: setPayload };
+
+    // Se tiver algo pra destruir, adicionamos na operação
+    if (Object.keys(unsetPayload).length > 0) {
+      updateOperation.$unset = unsetPayload;
+    }
+
+    // 5. Atualiza o Produto (Enviando a operação blindada)
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      updateOperation,
+      { new: true },
+    );
 
     // 6. Auditoria (Mantida)
     await SystemLog.create({
@@ -85,6 +105,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(updatedProduct);
   } catch (error: any) {
+    console.error("🚨 Erro Crítico no Backend:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

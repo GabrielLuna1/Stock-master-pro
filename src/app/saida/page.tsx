@@ -114,7 +114,11 @@ export default function FastCheckoutPage() {
 
       console.log("🚀 Enviando baixa de estoque:", payload);
 
-      const res = await fetch("/api/products", {
+      // Pegamos o ID do pacote para colocar na URL (garantia de sucesso)
+      const productId = scannedProduct._id;
+
+      // 🎯 O TIRO CERTO: Agora apontamos para a nossa rota blindada!
+      const res = await fetch(`/api/manage-product?id=${productId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
