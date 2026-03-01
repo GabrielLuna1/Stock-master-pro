@@ -80,8 +80,11 @@ export default function InventoryPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // 1. Carregar Dados Iniciais
-  const fetchData = async () => {
-    setLoading(true);
+  // 1. Carregar Dados Iniciais (Agora com "Modo Silencioso")
+  const fetchData = async (isSilent = false) => {
+    // Só exibe a tela de carregamento se NÃO for silencioso
+    if (!isSilent) setLoading(true);
+
     try {
       const [prodRes, catRes, supRes] = await Promise.all([
         fetch("/api/products", { cache: "no-store" }),
@@ -97,19 +100,29 @@ export default function InventoryPage() {
       setCategories(Array.isArray(cats) ? cats : []);
       setSuppliers(Array.isArray(sups) ? sups : []);
 
-      setSelectedIds([]);
+      // Só limpa as seleções se for a carga inicial (para não desmarcar o que o usuário clicou)
+      if (!isSilent) setSelectedIds([]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
-      toast.error("Erro ao carregar estoque.");
+      if (!isSilent) toast.error("Erro ao carregar estoque.");
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
+  // 2. O Radar de Tempo Real
   useEffect(() => {
+    // Busca inicial visível
     fetchData();
-  }, []);
 
+    // 📡 LIGA O RADAR: Busca invisível a cada 10 segundos
+    const radarInterval = setInterval(() => {
+      fetchData(true); // O "true" liga o Modo Silencioso
+    }, 10000);
+
+    // Desliga o radar se o usuário mudar de tela
+    return () => clearInterval(radarInterval);
+  }, []);
   // Resetar página ao filtrar
   useEffect(() => {
     setCurrentPage(1);
