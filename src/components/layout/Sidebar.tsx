@@ -20,6 +20,9 @@ import {
   ShieldAlert,
   Truck,
   Zap,
+  BookOpen,
+  FileText,
+  BookMarked,
 } from "lucide-react";
 
 import { useDashboard } from "@/providers/DashboardContext";
@@ -34,8 +37,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { data: session } = useSession();
   const { criticalCount } = useDashboard();
 
+  // 👇 ESTADOS DO MENU
   const [isLogMenuOpen, setIsLogMenuOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isDocsOpen, setIsDocsOpen] = useState(false); // ✨ CORRIGIDO: Estado do menu de Documentação!
 
   useEffect(() => {
     if (pathname.startsWith("/log")) {
@@ -69,7 +74,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const isSupreme = session?.user?.email === "admin@stockmaster.com";
   const isLogActive = pathname.startsWith("/log");
 
-  // 👇 MENU 100% PADRONIZADO (Sem highlights)
   const menuItems = [
     { name: "Painel", href: "/", icon: LayoutDashboard },
     { name: "Saída Expressa", href: "/saida", icon: Zap },
@@ -124,7 +128,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </button>
           </div>
 
-          {/* MENU */}
+          {/* MENU PRINCIPAL */}
           <nav className="px-4 mt-2 space-y-1">
             {menuItems.map((item) => {
               const isActive = pathname === item.href;
@@ -222,6 +226,59 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 )}
               </div>
             )}
+
+            {/* ✨ NOVO SUBMENU: DOCUMENTAÇÃO (CLONADO DO ESTILO PADRÃO) */}
+            {/* ✨ NOVO SUBMENU: DOCUMENTAÇÃO (AGORA COM O VERMELHO STOCKMASTER) */}
+            <div className="pt-2 mb-4">
+              <button
+                onClick={() => setIsDocsOpen(!isDocsOpen)}
+                className={`w-full flex items-center justify-between p-3.5 rounded-xl transition-all group ${
+                  isDocsOpen
+                    ? "bg-red-50 text-red-600 shadow-sm font-black" // ❤️ Fundo vermelho claro e texto vermelho
+                    : "text-gray-400 hover:bg-gray-50 hover:text-gray-900 font-bold"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <BookMarked
+                    size={20}
+                    className={
+                      isDocsOpen
+                        ? "text-red-600" // ❤️ Ícone vermelho
+                        : "text-gray-400 group-hover:text-gray-600"
+                    }
+                  />
+                  <span className="text-sm">DOCUMENTAÇÃO</span>
+                </div>
+                {isDocsOpen ? (
+                  <ChevronDown size={14} className="text-red-600" />
+                ) : (
+                  <ChevronRight size={14} />
+                )}
+              </button>
+
+              {isDocsOpen && (
+                <div className="mt-1 space-y-1 relative animate-in slide-in-from-top-2 duration-200">
+                  {/* A linha vertical elegante que conecta os menus */}
+                  <div className="absolute left-[26px] top-0 bottom-0 w-px bg-gray-100"></div>
+
+                  <a
+                    href="/docs/StockMaster_Manual_Uso.pdf"
+                    download="StockMaster_Manual_Uso.pdf"
+                    className="flex items-center gap-3 p-3 pl-14 rounded-xl text-xs font-bold transition-all relative text-gray-400 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <BookOpen size={16} /> Manual de Uso
+                  </a>
+
+                  <a
+                    href="/docs/StockMaster_Pro_Documentacao_v3.pdf"
+                    download="StockMaster_Pro_Documentacao_v3.pdf"
+                    className="flex items-center gap-3 p-3 pl-14 rounded-xl text-xs font-bold transition-all relative text-gray-400 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <FileText size={16} /> Doc. Técnica
+                  </a>
+                </div>
+              )}
+            </div>
           </nav>
         </div>
 
