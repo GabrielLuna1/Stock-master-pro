@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 
@@ -45,7 +45,30 @@ export default function AuditoriaPage() {
     "critical",
   ]);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  // 👇 Alvo para o scroll
+  const topRef = useRef<HTMLDivElement>(null);
+
+  // Efeito responsivo para mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setItemsPerPage(10);
+      } else {
+        setItemsPerPage(20);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Função mágica de troca de página
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -300,7 +323,10 @@ export default function AuditoriaPage() {
   ];
 
   return (
-    <div className="p-4 md:p-12 min-h-screen bg-gray-50/50 flex flex-col pb-24">
+    <div
+      ref={topRef}
+      className="p-4 md:p-12 min-h-screen bg-gray-50/50 flex flex-col pb-24"
+    >
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -385,7 +411,7 @@ export default function AuditoriaPage() {
       {/* PAGINAÇÃO */}
       <div className="flex items-center justify-between mt-6">
         <button
-          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
           disabled={currentPage === 1 || loading}
           className="group flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-2xl shadow-sm text-sm font-bold text-gray-600 hover:border-red-500 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
         >
@@ -407,7 +433,9 @@ export default function AuditoriaPage() {
           </div>
         </div>
         <button
-          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+          onClick={() =>
+            handlePageChange(Math.min(totalPages, currentPage + 1))
+          }
           disabled={currentPage === totalPages || loading || totalPages === 0}
           className="group flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-2xl shadow-sm text-sm font-bold text-gray-600 hover:border-red-500 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
         >

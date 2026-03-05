@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react"; // 👈 Import necessário
 import { toast } from "sonner"; // 👈 Feedback visual
 
@@ -38,7 +38,30 @@ export default function MovimentacoesPage() {
 
   // Paginação
   const [page, setPage] = useState(1);
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  // 👇 Alvo para o scroll
+  const topRef = useRef<HTMLDivElement>(null);
+
+  // Efeito responsivo para mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setItemsPerPage(10);
+      } else {
+        setItemsPerPage(20);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Função mágica de troca de página
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Filtros
   const [startDate, setStartDate] = useState("");
@@ -314,7 +337,10 @@ export default function MovimentacoesPage() {
   ];
 
   return (
-    <div className="p-4 md:p-12 min-h-screen bg-gray-50/50 flex flex-col pb-24 relative">
+    <div
+      ref={topRef}
+      className="p-4 md:p-12 min-h-screen bg-gray-50/50 flex flex-col pb-24 relative"
+    >
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -464,7 +490,7 @@ export default function MovimentacoesPage() {
       {/* CONTROLES DE PAGINAÇÃO */}
       <div className="flex items-center justify-between mt-auto pt-4">
         <button
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          onClick={() => handlePageChange(Math.max(1, page - 1))}
           disabled={page === 1 || loading}
           className="group flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-2xl shadow-sm text-sm font-bold text-gray-600 hover:border-brand-red hover:text-brand-red disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
         >
@@ -484,7 +510,7 @@ export default function MovimentacoesPage() {
           </div>
         </div>
         <button
-          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
           disabled={page === totalPages || loading || totalPages === 0}
           className="group flex items-center gap-3 px-5 py-3 bg-white border border-gray-200 rounded-2xl shadow-sm text-sm font-bold text-gray-600 hover:border-brand-red hover:text-brand-red disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
         >

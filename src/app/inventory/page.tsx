@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
   Search,
@@ -64,8 +64,36 @@ export default function InventoryPage() {
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
 
   // Paginação
+  // Paginação
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  // Efeito para detectar mobile e ajustar o limite de itens
+  useEffect(() => {
+    const handleResize = () => {
+      // 768px é o breakpoint 'md' padrão do Tailwind (Tablets/Celulares)
+      if (window.innerWidth < 768) {
+        setItemsPerPage(10);
+      } else {
+        setItemsPerPage(20);
+      }
+    };
+
+    // Executa na primeira vez que a tela carrega
+    handleResize();
+
+    // Fica escutando caso o usuário redimensione a janela (no PC)
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Função mágica para trocar de página e subir a tela
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    // Em vez de rolar a janela, ele puxa o "Alvo" para a tela de forma suave
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Estados dos Modais
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -481,7 +509,10 @@ export default function InventoryPage() {
   ];
 
   return (
-    <div className="p-4 md:p-12 min-h-screen flex flex-col relative pb-24">
+    <div
+      ref={topRef}
+      className="p-4 md:p-12 min-h-screen flex flex-col relative pb-24"
+    >
       {/* HEADER */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -666,9 +697,9 @@ export default function InventoryPage() {
       {/* PAGINAÇÃO */}
       <div className="flex items-center justify-between mt-8">
         <button
-          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
           disabled={currentPage === 1}
-          className="flex items-center gap-2 px-4 py-2 bg-white border rounded-xl font-bold text-gray-600 disabled:opacity-50 text-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 disabled:opacity-50 text-sm hover:bg-gray-50 transition-all active:scale-95"
         >
           <ChevronLeft size={16} /> Anterior
         </button>
@@ -676,9 +707,11 @@ export default function InventoryPage() {
           Página {currentPage} de {totalPages || 1}
         </span>
         <button
-          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+          onClick={() =>
+            handlePageChange(Math.min(totalPages, currentPage + 1))
+          }
           disabled={currentPage === totalPages || totalPages === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-white border rounded-xl font-bold text-gray-600 disabled:opacity-50 text-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 disabled:opacity-50 text-sm hover:bg-gray-50 transition-all active:scale-95"
         >
           Próxima <ChevronRight size={16} />
         </button>

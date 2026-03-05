@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react"; // 👈 1. Importação da Sessão adicionada
+import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
 import {
   Plus,
   Search,
@@ -14,6 +14,8 @@ import {
   X,
   Loader2,
   AlertTriangle,
+  ChevronLeft, // 👈 Importado
+  ChevronRight, // 👈 Importado
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,13 +30,42 @@ interface Supplier {
 }
 
 export default function SuppliersPage() {
-  // 👈 2. Pegando os dados do usuário logado
   const { data: session } = useSession();
   const amIAdmin = (session?.user as any)?.role === "admin";
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // 👇 1. ESTADOS DE PAGINAÇÃO E RESPONSIVIDADE
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setItemsPerPage(10);
+      } else {
+        setItemsPerPage(20);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    if (topRef.current) {
+      topRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  // Reseta a página se o usuário pesquisar algo
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Modal e Edição
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,7 +98,7 @@ export default function SuppliersPage() {
 
   const [cepLoading, setCepLoading] = useState(false);
 
-  // 1. CARREGAR DADOS
+  // CARREGAR DADOS
   const fetchSuppliers = async () => {
     try {
       const res = await fetch("/api/suppliers");
@@ -84,50 +115,37 @@ export default function SuppliersPage() {
     fetchSuppliers();
   }, []);
 
-  // 2. MÁSCARAS DE INPUT (CNPJ & TELEFONE)
+  // MÁSCARAS DE INPUT
   const handleCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, ""); // Remove tudo que não é número
-
+    let value = e.target.value.replace(/\D/g, "");
     if (value.length > 14) value = value.slice(0, 14);
-
-    // Máscara CNPJ: 00.000.000/0000-00
     value = value
       .replace(/^(\d{2})(\d)/, "$1.$2")
       .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
       .replace(/\.(\d{3})(\d)/, ".$1/$2")
       .replace(/(\d{4})(\d)/, "$1-$2");
-
     setFormData({ ...formData, cnpj: value });
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, "");
     if (value.length > 11) value = value.slice(0, 11);
-
-    // Máscara Telefone: (11) 99999-9999
     value = value
       .replace(/^(\d{2})(\d)/g, "($1) $2")
       .replace(/(\d)(\d{4})$/, "$1-$2");
-
     setFormData({ ...formData, phone: value });
   };
 
-  // 3. BUSCA DE CEP INTELIGENTE
+  // BUSCA DE CEP INTELIGENTE
   useEffect(() => {
     const cleanCep = addressData.cep.replace(/\D/g, "");
-
-    if (cleanCep.length < 8) {
-      // Se apagou, limpa campos (exceto se estiver editando e não mexeu no cep)
-      return;
-    }
-
+    if (cleanCep.length < 8) return;
     if (cleanCep.length === 8) {
       const fetchCep = async () => {
         setCepLoading(true);
         try {
           const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
           const data = await res.json();
-
           if (data.erro) {
             toast.error("CEP não encontrado.");
             document.getElementById("cepInput")?.focus();
@@ -138,7 +156,7 @@ export default function SuppliersPage() {
               neighborhood: data.bairro || "",
               city: data.localidade || "",
               state: data.uf || "",
-              number: "", // Limpa número para forçar digitação
+              number: "",
             }));
             document.getElementById("numInput")?.focus();
           }
@@ -152,11 +170,10 @@ export default function SuppliersPage() {
     }
   }, [addressData.cep]);
 
-  // 4. ABRIR MODAL (COM PARSER DE ENDEREÇO)
+  // ABRIR MODAL
   const handleOpenModal = (supplier?: Supplier) => {
     if (supplier) {
       setEditingSupplier(supplier);
-
       setFormData({
         name: supplier.name,
         corporateName: supplier.corporateName || "",
@@ -165,8 +182,6 @@ export default function SuppliersPage() {
         phone: supplier.phone || "",
       });
 
-      // PARSER REVERSO DE ENDEREÇO
-      // Formato salvo: "Rua X, 10 - Bairro Y - Cidade/UF - CEP: 00000-000"
       let parsedAddress = {
         cep: "",
         street: "",
@@ -178,25 +193,18 @@ export default function SuppliersPage() {
 
       if (supplier.address && supplier.address.includes("CEP:")) {
         try {
-          // 1. Separa o CEP do resto
           const [restAddress, cepPart] = supplier.address.split(" - CEP: ");
           parsedAddress.cep = cepPart || "";
-
-          // 2. Separa Cidade/UF e Bairro
           const parts = restAddress.split(" - ");
-          // A estrutura esperada é: [Rua+Num, Bairro, Cidade/UF]
 
           if (parts.length >= 3) {
-            const cityState = parts[parts.length - 1]; // "Poá/SP"
-            parsedAddress.neighborhood = parts[parts.length - 2]; // "Centro"
-
+            const cityState = parts[parts.length - 1];
+            parsedAddress.neighborhood = parts[parts.length - 2];
             const [city, state] = cityState.split("/");
             parsedAddress.city = city || "";
             parsedAddress.state = state || "";
 
-            // 3. Separa Rua e Número
             const streetNumPart = parts.slice(0, parts.length - 2).join(" - ");
-
             const lastCommaIndex = streetNumPart.lastIndexOf(",");
             if (lastCommaIndex !== -1) {
               parsedAddress.street = streetNumPart
@@ -209,17 +217,14 @@ export default function SuppliersPage() {
               parsedAddress.street = streetNumPart;
             }
           } else {
-            // Fallback se o formato estiver estranho, joga tudo na rua
             parsedAddress.street = parts[0];
           }
         } catch (e) {
           parsedAddress.street = supplier.address;
         }
       } else {
-        // Se não tiver CEP salvo no formato padrão, joga tudo na rua
         parsedAddress.street = supplier.address || "";
       }
-
       setAddressData(parsedAddress);
     } else {
       setEditingSupplier(null);
@@ -242,16 +247,13 @@ export default function SuppliersPage() {
     setIsModalOpen(true);
   };
 
-  // 5. SALVAR
+  // SALVAR
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!formData.name) {
       toast.warning("Nome Fantasia é obrigatório.");
       return;
     }
-
-    // Monta o endereço completo para salvar
     const fullAddress = addressData.cep
       ? `${addressData.street}, ${addressData.number} - ${addressData.neighborhood} - ${addressData.city}/${addressData.state} - CEP: ${addressData.cep}`
       : addressData.street;
@@ -261,19 +263,15 @@ export default function SuppliersPage() {
       address: fullAddress,
       _id: editingSupplier ? editingSupplier._id : undefined,
     };
-
     const method = editingSupplier ? "PUT" : "POST";
-
     try {
       const res = await fetch("/api/suppliers", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao salvar");
-
       toast.success(
         editingSupplier ? "Parceiro atualizado!" : "Parceiro cadastrado!",
       );
@@ -284,7 +282,7 @@ export default function SuppliersPage() {
     }
   };
 
-  // NOVA FUNÇÃO DE EXCLUSÃO
+  // EXCLUSÃO
   const executeDelete = async () => {
     if (!supplierToDelete) return;
     setIsDeleting(true);
@@ -294,27 +292,35 @@ export default function SuppliersPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error); // Vai mostrar o erro do Safe Delete se houver
+        toast.error(data.error);
         setIsDeleting(false);
         return;
       }
       toast.success("Fornecedor excluído com sucesso.");
-      setSupplierToDelete(null); // Fecha o modal
-      fetchSuppliers(); // Atualiza a lista
+      setSupplierToDelete(null);
+      fetchSuppliers();
     } catch (error) {
       toast.error("Erro ao excluir.");
       setIsDeleting(false);
     }
   };
 
+  // 👇 2. LÓGICA DE FILTRAGEM E PAGINAÇÃO
   const filteredSuppliers = suppliers.filter(
     (s) =>
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.cnpj && s.cnpj.includes(searchTerm)),
   );
 
+  const totalPages = Math.ceil(filteredSuppliers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedSuppliers = filteredSuppliers.slice(
+    startIndex,
+    startIndex + itemsPerPage,
+  );
+
   return (
-    <div className="p-4 md:p-8 min-h-screen bg-gray-50/50 pb-24">
+    <div ref={topRef} className="p-4 md:p-8 min-h-screen bg-gray-50/50 pb-24">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
@@ -360,68 +366,116 @@ export default function SuppliersPage() {
           </h3>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredSuppliers.map((supplier) => (
-            <div
-              key={supplier._id}
-              className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group relative"
-            >
-              <div className="absolute top-4 right-4 flex gap-2">
-                <button
-                  onClick={() => handleOpenModal(supplier)}
-                  className="p-2 bg-gray-50 hover:bg-blue-50 text-gray-400 hover:text-blue-600 rounded-xl transition-colors"
-                  title="Editar Parceiro"
-                >
-                  <Edit size={16} />
-                </button>
-
-                {/* 👈 3. TRAVA DE SEGURANÇA: Só Admin vê o botão de excluir */}
-                {amIAdmin && (
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* 👇 3. MAP EM CIMA DOS FORNECEDORES PAGINADOS */}
+            {paginatedSuppliers.map((supplier) => (
+              <div
+                key={supplier._id}
+                className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group relative"
+              >
+                <div className="absolute top-4 right-4 flex gap-2">
                   <button
-                    onClick={() => setSupplierToDelete(supplier)}
-                    className="p-2 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
-                    title="Excluir Parceiro"
+                    onClick={() => handleOpenModal(supplier)}
+                    className="p-2 bg-gray-50 hover:bg-blue-50 text-gray-400 hover:text-blue-600 rounded-xl transition-colors"
+                    title="Editar Parceiro"
                   >
-                    <Trash2 size={16} />
+                    <Edit size={16} />
                   </button>
-                )}
-              </div>
 
-              <div className="flex items-start gap-4 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-red-600 font-bold text-lg">
-                  {supplier.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-lg leading-tight">
-                    {supplier.name}
-                  </h3>
-                  {supplier.corporateName && (
-                    <p className="text-xs text-gray-400 font-medium truncate max-w-[200px]">
-                      {supplier.corporateName}
-                    </p>
+                  {amIAdmin && (
+                    <button
+                      onClick={() => setSupplierToDelete(supplier)}
+                      className="p-2 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
+                      title="Excluir Parceiro"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   )}
-                  <span className="inline-block mt-1 px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded uppercase tracking-wide">
-                    {supplier.cnpj || "CNPJ N/A"}
-                  </span>
+                </div>
+
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-red-600 font-bold text-lg">
+                    {supplier.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-lg leading-tight">
+                      {supplier.name}
+                    </h3>
+                    {supplier.corporateName && (
+                      <p className="text-xs text-gray-400 font-medium truncate max-w-[200px]">
+                        {supplier.corporateName}
+                      </p>
+                    )}
+                    <span className="inline-block mt-1 px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded uppercase tracking-wide">
+                      {supplier.cnpj || "CNPJ N/A"}
+                    </span>
+                  </div>
+                </div>
+                <hr className="border-gray-50 my-4" />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <Mail size={16} className="text-gray-300" />
+                    <span className="truncate">{supplier.email || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <Phone size={16} className="text-gray-300" />
+                    <span>{supplier.phone || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                    <MapPin size={16} className="text-gray-300" />
+                    <span className="truncate">{supplier.address || "-"}</span>
+                  </div>
                 </div>
               </div>
-              <hr className="border-gray-50 my-4" />
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm text-gray-600">
-                  <Mail size={16} className="text-gray-300" />
-                  <span className="truncate">{supplier.email || "-"}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-gray-600">
-                  <Phone size={16} className="text-gray-300" />
-                  <span>{supplier.phone || "-"}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-gray-600">
-                  <MapPin size={16} className="text-gray-300" />
-                  <span className="truncate">{supplier.address || "-"}</span>
-                </div>
+            ))}
+          </div>
+
+          {/* 👇 4. RODAPÉ DE PAGINAÇÃO INCLUÍDO */}
+          {filteredSuppliers.length > itemsPerPage && (
+            <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-100 shadow-sm mt-4">
+              <p className="text-xs text-gray-500 font-medium">
+                Mostrando{" "}
+                <span className="font-bold text-gray-900">
+                  {startIndex + 1}
+                </span>{" "}
+                a{" "}
+                <span className="font-bold text-gray-900">
+                  {Math.min(
+                    startIndex + itemsPerPage,
+                    filteredSuppliers.length,
+                  )}
+                </span>{" "}
+                de{" "}
+                <span className="font-bold text-gray-900">
+                  {filteredSuppliers.length}
+                </span>{" "}
+                parceiros
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronLeft size={16} className="text-gray-600" />
+                </button>
+                <span className="text-sm font-bold text-gray-900 px-2">
+                  Página {currentPage} de {totalPages}
+                </span>
+                <button
+                  onClick={() =>
+                    handlePageChange(Math.min(totalPages, currentPage + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronRight size={16} className="text-gray-600" />
+                </button>
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
 

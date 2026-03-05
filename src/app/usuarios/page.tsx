@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
   Users,
@@ -16,8 +16,8 @@ import {
   Square,
   X,
   Shield,
-  ChevronLeft, // 👈 Novo ícone
-  ChevronRight, // 👈 Novo ícone
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,8 +37,6 @@ interface IUser {
   active: boolean;
 }
 
-const ITEMS_PER_PAGE = 20; // ⚡️ Limite fixo por página
-
 export default function UsersPage() {
   const { data: session } = useSession();
   const currentUserEmail = session?.user?.email;
@@ -48,8 +46,32 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Paginação
-  const [currentPage, setCurrentPage] = useState(1); // 📄 Página Atual
+  // Paginação e Responsividade (Tudo DENTRO do componente agora!)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  // Efeito para detectar mobile e ajustar o limite
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setItemsPerPage(10);
+      } else {
+        setItemsPerPage(20);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Função blindada de troca de página e scroll
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    if (topRef.current) {
+      topRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   // Filtros e Seleção
   const [filterRole, setFilterRole] = useState<"ALL" | "admin" | "operador">(
@@ -85,8 +107,7 @@ export default function UsersPage() {
     fetchUsers();
   }, []);
 
-  // 👇 RESETA A PÁGINA AO FILTRAR
-  // Se eu buscar algo, tenho que voltar para a página 1 para ver o resultado
+  // Reseta a página ao filtrar
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterRole]);
@@ -101,11 +122,11 @@ export default function UsersPage() {
   });
 
   // --- LÓGICA DE PAGINAÇÃO (Corte do Array) ---
-  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedUsers = filteredUsers.slice(
     startIndex,
-    startIndex + ITEMS_PER_PAGE,
+    startIndex + itemsPerPage,
   );
 
   // --- LÓGICA DE SELEÇÃO ---
@@ -337,7 +358,7 @@ export default function UsersPage() {
   ];
 
   return (
-    <div className="p-4 md:p-12 min-h-screen pb-24 relative">
+    <div ref={topRef} className="p-4 md:p-12 min-h-screen pb-24 relative">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -428,7 +449,7 @@ export default function UsersPage() {
             />
 
             {/* 👇 RODAPÉ DE PAGINAÇÃO */}
-            {filteredUsers.length > ITEMS_PER_PAGE && (
+            {filteredUsers.length > itemsPerPage && (
               <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                 <p className="text-xs text-gray-500 font-medium">
                   Mostrando{" "}
@@ -437,10 +458,7 @@ export default function UsersPage() {
                   </span>{" "}
                   a{" "}
                   <span className="font-bold text-gray-900">
-                    {Math.min(
-                      startIndex + ITEMS_PER_PAGE,
-                      filteredUsers.length,
-                    )}
+                    {Math.min(startIndex + itemsPerPage, filteredUsers.length)}
                   </span>{" "}
                   de{" "}
                   <span className="font-bold text-gray-900">
@@ -451,7 +469,9 @@ export default function UsersPage() {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    onClick={() =>
+                      handlePageChange(Math.max(1, currentPage - 1))
+                    }
                     disabled={currentPage === 1}
                     className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
@@ -462,7 +482,7 @@ export default function UsersPage() {
                   </span>
                   <button
                     onClick={() =>
-                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                      handlePageChange(Math.min(totalPages, currentPage + 1))
                     }
                     disabled={currentPage === totalPages}
                     className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
