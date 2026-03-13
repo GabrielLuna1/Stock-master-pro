@@ -285,47 +285,159 @@ Configure as mesmas variáveis de ambiente do `.env.local` no painel da Vercel e
 ## 📁 Estrutura do Projeto
 
 ```
-stock-master-pro/
-├── app/
-│   ├── (auth)/
-│   │   └── login/
-│   ├── (dashboard)/
-│   │   ├── page.tsx              # Painel / Dashboard
-│   │   ├── inventory/            # Gerência de Estoque
-│   │   ├── categories/           # Gestão de Categorias
-│   │   ├── suppliers/            # Fornecedores
-│   │   ├── users/                # Gestão de Time
-│   │   ├── express-exit/         # Saída Expressa
-│   │   └── log/
-│   │       ├── movements/        # Central de Movimentações
-│   │       └── audit/            # Auditoria Geral
-│   └── api/
-│       ├── auth/                 # NextAuth handlers
-│       ├── products/             # CRUD de produtos
-│       ├── categories/           # CRUD de categorias
-│       ├── suppliers/            # CRUD de fornecedores
-│       ├── users/                # CRUD de usuários
-│       ├── movements/            # Log de movimentações
-│       ├── audit/                # Log de auditoria
-│       └── reports/              # Geração de relatórios
-├── components/
-│   ├── ui/                       # Componentes base
-│   ├── modals/                   # Modais (Cadastro, Edição, Exclusão)
-│   ├── charts/                   # Gráficos Recharts
-│   └── labels/                   # Geração de etiquetas QR
-├── lib/
-│   ├── mongodb.ts                # Conexão com Atlas
-│   ├── auth.ts                   # Configuração NextAuth
-│   └── utils.ts                  # Utilitários gerais
-├── models/
-│   ├── User.ts                   # Schema Mongoose — Usuários
-│   ├── Product.ts                # Schema Mongoose — Produtos
-│   ├── Category.ts               # Schema Mongoose — Categorias
-│   ├── Supplier.ts               # Schema Mongoose — Fornecedores
-│   ├── Movement.ts               # Schema Mongoose — Movimentações
-│   └── AuditLog.ts               # Schema Mongoose — Auditoria
-├── middleware.ts                 # Proteção de rotas via NextAuth
-└── .env.local                    # Variáveis de ambiente (não commitado)
+stock-master-pro
+├── README.md
+├── eslint.config.mjs
+├── estrutura_completa.txt
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── docs
+│   │   ├── StockMaster_Manual_Uso.pdf
+│   │   └── StockMaster_Pro_Documentacao_v3.pdf
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── src
+│   ├── app
+│   │   ├── api
+│   │   │   ├── admin
+│   │   │   │   └── reset-history
+│   │   │   │       └── route.ts
+│   │   │   ├── auth
+│   │   │   │   ├── [...nextauth]
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── forgot-password
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── log-exit
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── reset-password
+│   │   │   │       └── route.ts
+│   │   │   ├── categories
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── dashboard
+│   │   │   │   ├── chart
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── debug-auth
+│   │   │   │   └── route.ts
+│   │   │   ├── fix-db
+│   │   │   │   └── route.ts
+│   │   │   ├── manage-product
+│   │   │   │   └── route.ts
+│   │   │   ├── movements
+│   │   │   │   └── route.ts
+│   │   │   ├── products
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── batch
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── import
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── reset-products
+│   │   │   │   └── route.ts
+│   │   │   ├── setup
+│   │   │   │   └── route.ts
+│   │   │   ├── suppliers
+│   │   │   │   └── route.ts
+│   │   │   ├── system
+│   │   │   │   └── version
+│   │   │   │       └── route.ts
+│   │   │   ├── system-logs
+│   │   │   │   └── route.ts
+│   │   │   └── users
+│   │   │       ├── [id]
+│   │   │       │   └── route.ts
+│   │   │       ├── batch
+│   │   │       │   └── route.ts
+│   │   │       └── route.ts
+│   │   ├── categorias
+│   │   │   └── page.tsx
+│   │   ├── favicon.ico
+│   │   ├── forgot-password
+│   │   │   └── page.tsx
+│   │   ├── fornecedores
+│   │   │   └── page.tsx
+│   │   ├── globals.css
+│   │   ├── inventory
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx
+│   │   ├── log
+│   │   │   ├── auditoria
+│   │   │   │   └── page.tsx
+│   │   │   └── movimentacoes
+│   │   │       └── page.tsx
+│   │   ├── login
+│   │   │   └── page.tsx
+│   │   ├── page.tsx
+│   │   ├── reset-password
+│   │   │   └── page.tsx
+│   │   ├── saida
+│   │   │   └── page.tsx
+│   │   └── usuarios
+│   │       └── page.tsx
+│   ├── components
+│   │   ├── admin
+│   │   │   └── ResetHistoryModal.tsx
+│   │   ├── categories
+│   │   │   └── DeleteCategoryModal.tsx
+│   │   ├── common
+│   │   ├── dashboard
+│   │   │   └── OverviewChart.tsx
+│   │   ├── inventory
+│   │   │   ├── AddCategoryModal.tsx
+│   │   │   ├── AddProductModal.tsx
+│   │   │   ├── BatchDeleteModal.tsx
+│   │   │   ├── DeleteConfirmModal.tsx
+│   │   │   ├── EditProductModal.tsx
+│   │   │   ├── HistoryModal.tsx
+│   │   │   ├── ImportCSVButton.tsx
+│   │   │   ├── PrintLabelModal.tsx
+│   │   │   └── StatCard.tsx
+│   │   ├── layout
+│   │   │   ├── AppLayout.tsx
+│   │   │   ├── AutoUpdate.tsx
+│   │   │   ├── Navbar.tsx
+│   │   │   └── Sidebar.tsx
+│   │   ├── providers
+│   │   │   └── AuthProvider.tsx
+│   │   ├── ui
+│   │   │   └── DataDisplay.tsx
+│   │   └── users
+│   │       ├── AddUserModal.tsx
+│   │       ├── DeleteUserModal.tsx
+│   │       └── EditUserModal.tsx
+│   ├── context
+│   │   └── LanguageContext.tsx
+│   ├── data
+│   │   └── content.ts
+│   ├── hooks
+│   ├── lib
+│   │   ├── auth.ts
+│   │   ├── logger.ts
+│   │   └── mongodb.ts
+│   ├── middleware.ts
+│   ├── models
+│   │   ├── Category.ts
+│   │   ├── Movement.ts
+│   │   ├── Product.ts
+│   │   ├── Supplier.ts
+│   │   ├── SystemLog.ts
+│   │   └── User.ts
+│   ├── providers
+│   │   └── DashboardContext.tsx
+│   ├── services
+│   └── types
+│       └── index.ts
+├── tailwind.config.ts
+└── tsconfig.json
 ```
 
 ---
